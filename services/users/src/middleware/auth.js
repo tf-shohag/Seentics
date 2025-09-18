@@ -93,11 +93,12 @@ export const checkUsageLimit = (limitType) => {
       }
 
       // Import models here to avoid circular dependency
-      const { User } = await import('../models/User.js');
-      const { Subscription, PLAN_LIMITS } = await import('../models/Subscription.js');
+      const UserModel = (await import('../models/User.js')).default;
+      const SubscriptionModel = (await import('../models/Subscription.js')).default;
+      const { PLAN_LIMITS } = await import('../models/Subscription.js');
 
       // Get user with subscription for usage data
-      const user = await User.findById(userId).populate('subscriptionId');
+      const user = await UserModel.findById(userId).populate('subscriptionId');
       
       if (!user || !user.subscriptionId) {
         return res.status(404).json({

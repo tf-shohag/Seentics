@@ -26,7 +26,7 @@ services:
     container_name: user-service
     ports:
       - "3001:3001"
-    env_file: .env.development
+    env_file: .env
     environment:
       - PORT=3001
       - MONGODB_URI=mongodb://seentics:seentics_mongo_pass@mongodb:27017/seentics?authSource=admin
@@ -52,9 +52,9 @@ services:
     container_name: analytics-service
     ports:
       - "3002:3002"
-    env_file: .env.development
+    env_file: .env
     environment:
-      - ENVIRONMENT=development
+      - ENVIRONMENT
       - PORT=3002
       - DATABASE_URL=postgres://seentics:seentics_postgres_pass@timescaledb:5432/seentics_analytics?sslmode=disable
       - LOG_LEVEL=info
@@ -83,7 +83,7 @@ services:
     container_name: workflows-service
     ports:
       - "3003:3003"
-    env_file: .env.development
+    env_file: .env
     environment:
       - PORT=3003
       - MONGODB_URI=mongodb://seentics:seentics_mongo_pass@mongodb:27017/seentics_workflows?authSource=admin

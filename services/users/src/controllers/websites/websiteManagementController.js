@@ -2,6 +2,23 @@ import Website from '../../models/Website.js';
 import CacheService from './cacheService.js';
 import crypto from 'crypto';
 
+// Helper: extract domain/hostname from a URL or raw domain string
+function extractDomain(url) {
+  try {
+    if (typeof url !== 'string' || url.trim() === '') return '';
+    // If it's already a full URL, parse it
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      const urlObj = new URL(url);
+      return urlObj.hostname;
+    }
+    // If it's just a domain/IP, strip path/port if any and return
+    return url.replace(/^https?:\/\//, '').replace(/\/.*$/, '').split(':')[0];
+  } catch (error) {
+    // Fallback: best-effort cleanup
+    return url.replace(/^https?:\/\//, '').replace(/\/.*$/, '').split(':')[0];
+  }
+}
+
 // Get all websites for user
 export const getAllWebsites = async (req, res) => {
     try {
@@ -78,11 +95,18 @@ export const createWebsite = async (req, res) => {
       // Create verification token
       const verificationToken = crypto.randomBytes(32).toString('hex');
 
-      // Add website
+      // Derive required fields
+      const domain = extractDomain(url);
+      // Generate a unique site identifier for trackers (16-24 hex chars)
+      const siteId = crypto.randomBytes(12).toString('hex');
+
+      // Add website with required fields
       const website = new Website({
         userId: req.userId,
         name,
         url,
+        domain,
+        siteId,
         verificationToken,
         settings: {
           allowedOrigins: [url],
@@ -149,9 +173,10 @@ export const updateWebsite = async (req, res) => {
           });
         }
 
-        // Reset verification if URL changed
+        // Reset verification and update domain if URL changed
         website.isVerified = false;
         website.verificationToken = crypto.randomBytes(32).toString('hex');
+        website.domain = extractDomain(url);
         website.settings.allowedOrigins = [url];
       }
 
@@ -315,21 +340,6 @@ export const validateWebsite = async (req, res) => {
       }
 
       // Extract domain/hostname from both stored URL and request domain
-      const extractDomain = (url) => {
-        try {
-          // If it's already a full URL, parse it
-          if (url.startsWith('http://') || url.startsWith('https://')) {
-            const urlObj = new URL(url);
-            return urlObj.hostname;
-          }
-          // If it's just a domain/IP, return as is
-          return url;
-        } catch (error) {
-          // Fallback: remove protocol and path
-          return url.replace(/^https?:\/\//, '').replace(/\/.*$/, '').split(':')[0];
-        }
-      };
-
       const websiteDomain = extractDomain(website.url);
       const requestDomain = extractDomain(domain);
 

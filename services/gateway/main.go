@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -34,54 +32,6 @@ func main() {
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Response from gateway"))
-	})
-
-	// Webhook test endpoint - logs all incoming webhook data
-	mux.HandleFunc("/webhook-test", func(w http.ResponseWriter, r *http.Request) {
-		// Set CORS headers
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		// Read the request body
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			log.Printf("Error reading webhook body: %v", err)
-			http.Error(w, "Error reading request body", http.StatusBadRequest)
-			return
-		}
-
-		// Log the webhook data
-		log.Printf("🔗 WEBHOOK RECEIVED:")
-		log.Printf("Method: %s", r.Method)
-		log.Printf("URL: %s", r.URL.String())
-		log.Printf("Headers: %v", r.Header)
-		log.Printf("Body: %s", string(body))
-
-		// Try to parse JSON for pretty logging
-		var jsonData interface{}
-		if err := json.Unmarshal(body, &jsonData); err == nil {
-			prettyJSON, _ := json.MarshalIndent(jsonData, "", "  ")
-			log.Printf("Parsed JSON:\n%s", string(prettyJSON))
-		}
-
-		// Respond with success
-		response := map[string]interface{}{
-			"success":     true,
-			"message":     "Webhook received successfully",
-			"timestamp":   time.Now().Format(time.RFC3339),
-			"method":      r.Method,
-			"headers":     r.Header,
-			"body_length": len(body),
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
 	})
 
 	// Routes
@@ -134,7 +84,7 @@ func main() {
 
 	// Initialize events tracker
 	middlewares.InitEventsTracker()
-	
+
 	handler := middlewares.ApplyMiddleware(mux, middlewares.LoggingMiddleware, middlewares.CORSMiddleware, middlewares.RateLimiterMiddleware, middlewares.AuthMiddleware, middlewares.EventsLimitMiddleware)
 
 	port := os.Getenv("API_GATEWAY_PORT")

@@ -150,6 +150,14 @@ const nodeTypes: { name: string; nodes: Omit<PaletteNode, 'title'>[]; icon: Luci
         difficulty: 'Beginner'
       },
       { 
+        name: 'Show Notification', 
+        iconName: 'Bell', 
+        type: 'Action', 
+        color: 'hsl(var(--chart-4))',
+        description: 'Displays a lightweight toast notification',
+        difficulty: 'Beginner'
+      },
+      { 
         name: 'Track Event', 
         iconName: 'BarChart2', 
         type: 'Action', 

@@ -157,6 +157,7 @@ const NodeSettingsForm: React.FC<{
           <Label className="text-sm font-medium">Action Frequency</Label>
           <Select
             value={settings.frequency || 'once_per_session'}
+            defaultValue='once_per_session'
             onValueChange={(value) => handleSettingChange('frequency', value)}
           >
             <SelectTrigger>
@@ -188,6 +189,34 @@ const NodeSettingsForm: React.FC<{
       onSettingsChange({ ...settings, displayMode: 'simple' });
     }
   }, [node.data.title, settings.displayMode]); // Remove onSettingsChange and settings from dependencies
+
+  // Set default values for Show Notification action
+  useEffect(() => {
+    if (node.data.title === 'Show Notification') {
+      const defaults = {
+        notificationType: 'info' as const,
+        notificationPosition: 'top-right' as const,
+        notificationDuration: 5000,
+        showIcon: true,
+        showCloseButton: true,
+        clickToDismiss: true,
+        frequency: settings.frequency || 'once_per_session' as const,
+      };
+
+      let needsUpdate = false;
+      const newSettings: any = { ...settings };
+      (Object.keys(defaults) as (keyof typeof defaults)[]).forEach((key) => {
+        if (newSettings[key] === undefined || newSettings[key] === null) {
+          newSettings[key] = defaults[key];
+          needsUpdate = true;
+        }
+      });
+
+      if (needsUpdate) {
+        onSettingsChange(newSettings);
+      }
+    }
+  }, [node.data.title]);
 
   // Set default values for Funnel
   useEffect(() => {
@@ -985,6 +1014,132 @@ const NodeSettingsForm: React.FC<{
               <p className="text-xs text-muted-foreground">
                 The URL to redirect the visitor to when this action is triggered.
               </p>
+            </div>
+          </div>
+        );
+      case 'Show Notification':
+        return (
+          <div className="space-y-4">
+            <FrequencyControlSection />
+            <div className="space-y-2">
+              <Label htmlFor="notificationMessage" className="text-sm font-medium">Message</Label>
+              <Textarea
+                id="notificationMessage"
+                placeholder="e.g., Your discount has been applied!"
+                value={settings.notificationMessage || ''}
+                onChange={(e) => handleSettingChange('notificationMessage', e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Type</Label>
+                <Select
+                  value={settings.notificationType || 'info'}
+                  onValueChange={(v) => handleSettingChange('notificationType', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="info">Info</SelectItem>
+                    <SelectItem value="success">Success</SelectItem>
+                    <SelectItem value="warning">Warning</SelectItem>
+                    <SelectItem value="error">Error</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Position</Label>
+                <Select
+                  value={settings.notificationPosition || 'top-right'}
+                  onValueChange={(v) => handleSettingChange('notificationPosition', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="top-left">Top Left</SelectItem>
+                    <SelectItem value="top-right">Top Right</SelectItem>
+                    <SelectItem value="bottom-left">Bottom Left</SelectItem>
+                    <SelectItem value="bottom-right">Bottom Right</SelectItem>
+                    <SelectItem value="top-center">Top Center</SelectItem>
+                    <SelectItem value="bottom-center">Bottom Center</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="notificationDuration" className="text-sm font-medium">Duration (seconds)</Label>
+              <Input
+                id="notificationDuration"
+                type="number"
+                placeholder="e.g., 5"
+                value={typeof settings.notificationDuration === 'number' ? Math.round((settings.notificationDuration || 0) / 1000) : ''}
+                onChange={(e) => {
+                  const seconds = parseInt(e.target.value || '0', 10);
+                  handleSettingChange('notificationDuration', isNaN(seconds) ? undefined : seconds * 1000);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">How long to show the notification. Set to 0 to keep it until dismissed.</p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Show Icon</Label>
+                <RadioGroup
+                  value={(settings.showIcon ?? true) ? 'yes' : 'no'}
+                  onValueChange={(v) => handleSettingChange('showIcon', v === 'yes')}
+                  className="flex gap-3"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="yes" id="notif-icon-yes" />
+                    <Label htmlFor="notif-icon-yes">Yes</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="no" id="notif-icon-no" />
+                    <Label htmlFor="notif-icon-no">No</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Close Button</Label>
+                <RadioGroup
+                  value={(settings.showCloseButton ?? true) ? 'yes' : 'no'}
+                  onValueChange={(v) => handleSettingChange('showCloseButton', v === 'yes')}
+                  className="flex gap-3"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="yes" id="notif-close-yes" />
+                    <Label htmlFor="notif-close-yes">Yes</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="no" id="notif-close-no" />
+                    <Label htmlFor="notif-close-no">No</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Click to Dismiss</Label>
+                <RadioGroup
+                  value={(settings.clickToDismiss ?? true) ? 'yes' : 'no'}
+                  onValueChange={(v) => handleSettingChange('clickToDismiss', v === 'yes')}
+                  className="flex gap-3"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="yes" id="notif-click-yes" />
+                    <Label htmlFor="notif-click-yes">Yes</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="no" id="notif-click-no" />
+                    <Label htmlFor="notif-click-no">No</Label>
+                  </div>
+                </RadioGroup>
+              </div>
             </div>
           </div>
         );

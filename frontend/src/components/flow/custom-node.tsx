@@ -39,6 +39,14 @@ export type NodeSettings = {
   modalTitle?: string;
   modalContent?: string;
   redirectUrl?: string;
+  // Notification action settings
+  notificationMessage?: string;
+  notificationType?: 'success' | 'error' | 'warning' | 'info';
+  notificationPosition?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'top-center' | 'bottom-center';
+  notificationDuration?: number; // ms
+  showIcon?: boolean;
+  showCloseButton?: boolean;
+  clickToDismiss?: boolean;
   emailSendType?: 'visitor' | 'custom'; // For Send Email action
   emailTo?: string;
   emailSubject?: string;
