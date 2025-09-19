@@ -1,10 +1,11 @@
+version: "3.9"
 
-
-# Production compose for AWS t3a.medium (2 vCPU, 4GB RAM)
+# Production compose for self-hosted deployment on a single VM (e.g., AWS t3a.medium)
 # - Exposes only Nginx on 80/443
-# - Internal services use Docker network and "expose" only
-# - Secrets and URLs should come from an external env file
-#   Use: docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+# - All internal services communicate over the private Docker network
+# - Provide real secrets via: --env-file .env.production
+#   Example:
+#   docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 
 services:
   nginx:
@@ -15,11 +16,8 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      # Bind mount SSL certs directory into /etc/nginx/ssl
-      # Option A: Use repo-managed certs (place fullchain.pem and privkey.pem in ./nginx/ssl)
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-      # Option B: Use Let's Encrypt certs from host (uncomment next line and comment Option A)
-      # - /etc/letsencrypt/live/api.seentics.com:/etc/nginx/ssl:ro
+      # Place fullchain.pem and privkey.pem into ./prod/nginx/ssl
+      - ./prod/nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
       - api-gateway
     networks:
@@ -42,7 +40,6 @@ services:
       - USER_SERVICE_URL=http://user-service:3001
       - ANALYTICS_SERVICE_URL=http://analytics-service:3002
       - WORKFLOW_SERVICE_URL=http://workflows-service:3003
-      # Should be in env file with password, e.g. redis://:password@redis:6379
       - REDIS_URL=${REDIS_URL}
       - GLOBAL_API_KEY=${GLOBAL_API_KEY}
     depends_on:
@@ -61,7 +58,6 @@ services:
       - "3001"
     environment:
       - PORT=3001
-      # Provide full URI in env file: mongodb://user:pass@mongodb:27017/db?authSource=admin
       - MONGODB_URI=${USERS_MONGODB_URI}
       - USER_JWT_SECRET=${JWT_SECRET}
       - FRONTEND_URL=${FRONTEND_URL}
@@ -88,11 +84,9 @@ services:
     environment:
       - ENVIRONMENT=production
       - PORT=3002
-      # Provide full Postgres URI in env: postgres://user:pass@timescaledb:5432/db?sslmode=disable
       - DATABASE_URL=${ANALYTICS_DATABASE_URL}
       - LOG_LEVEL=info
       - JWT_SECRET=${JWT_SECRET}
-      # Use a proper Redis URL with password
       - REDIS_URL=${REDIS_URL}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - GLOBAL_API_KEY=${GLOBAL_API_KEY}
@@ -119,9 +113,7 @@ services:
       - "3003"
     environment:
       - PORT=3003
-      # Provide full URI in env file: mongodb://user:pass@mongodb:27017/seentics_workflows?authSource=admin
       - MONGODB_URI=${WORKFLOWS_MONGODB_URI}
-      # Use a proper Redis URL with password
       - REDIS_URL=${REDIS_URL}
       - JWT_SECRET=${JWT_SECRET}
       - API_GATEWAY_URL=http://api-gateway:8080
@@ -154,14 +146,14 @@ services:
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     volumes:
       - mongo-data:/data/db
-      # Initialization scripts (run only when /data/db is empty)
-      - ./db/mongo-init:/docker-entrypoint-initdb.d:ro
+      - ./prod/mongodb/mongod.conf:/etc/mongod.conf:ro
+      - ./prod/mongodb/init:/docker-entrypoint-initdb.d:ro
     networks:
       - seentics-network
     restart: unless-stopped
-    command: mongod --auth --wiredTigerCacheSizeGB 1 --maxConns 100
+    command: ["mongod", "--config", "/etc/mongod.conf", "--auth"]
     healthcheck:
-      # Test that just checks if mongod process is responsive
+      # mongod responsiveness check; does not require credentials
       test: ["CMD-SHELL", "mongosh --quiet --eval 'quit(db.runCommand({ping: 1}).ok ? 0 : 2)'"]
       interval: 10s
       timeout: 5s
@@ -179,12 +171,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - timescaledb-data:/var/lib/postgresql/data
-      # Initialization scripts (run only when data dir is empty)
-      - ./db/postgres-init:/docker-entrypoint-initdb.d:ro
+      - ./prod/timescaledb/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     networks:
       - seentics-network
     restart: unless-stopped
-    command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h localhost -p 5432"]
       interval: 5s
