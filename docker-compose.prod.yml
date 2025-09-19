@@ -42,7 +42,7 @@ services:
   user-service:
     build: ./services/users
     container_name: user-service
-    env_file: .env
+    env_file: .env.production
     environment:
       - PORT=3001
       - MONGODB_URI=mongodb://seentics:seentics_mongo_pass@mongodb:27017/seentics?authSource=admin
@@ -66,7 +66,7 @@ services:
   analytics-service:
     build: ./services/analytics
     container_name: analytics-service
-    env_file: .env
+    env_file: .env.production
     environment:
       - ENVIRONMENT
       - PORT=3002
@@ -95,7 +95,7 @@ services:
   workflows-service:
     build: ./services/workflows
     container_name: workflows-service
-    env_file: .env
+    env_file: .env.production
     environment:
       - PORT=3003
       - MONGODB_URI=mongodb://seentics:seentics_mongo_pass@mongodb:27017/seentics_workflows?authSource=admin
