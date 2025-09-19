@@ -1,4 +1,3 @@
-version: "3.9"
 
 # Production compose for self-hosted deployment on a single VM (e.g., AWS t3a.medium)
 # - Exposes only Nginx on 80/443
