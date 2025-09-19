@@ -145,26 +145,28 @@ services:
       start_period: 5s
 
   mongodb:
-      image: mongo:7
-      container_name: mongodb
-      expose:
-        - "27017"
-      environment:
-        - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
-        - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
-      volumes:
-        - mongo-data:/data/db
-      networks:
-        - seentics-network
-      restart: unless-stopped
-      command: mongod --auth --wiredTigerCacheSizeGB 1 --maxConns 100
-      healthcheck:
-        # Test that just checks if mongod process is responsive
-        test: ["CMD-SHELL", "mongosh --quiet --eval 'quit(db.runCommand({ping: 1}).ok ? 0 : 2)'"]
-        interval: 10s
-        timeout: 5s
-        retries: 5
-        start_period: 30s
+    image: mongo:7
+    container_name: mongodb
+    expose:
+      - "27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+      # Initialization scripts (run only when /data/db is empty)
+      - ./db/mongo-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - seentics-network
+    restart: unless-stopped
+    command: mongod --auth --wiredTigerCacheSizeGB 1 --maxConns 100
+    healthcheck:
+      # Test that just checks if mongod process is responsive
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'quit(db.runCommand({ping: 1}).ok ? 0 : 2)'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   timescaledb:
     image: timescale/timescaledb:latest-pg14
@@ -177,6 +179,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - timescaledb-data:/var/lib/postgresql/data
+      # Initialization scripts (run only when data dir is empty)
+      - ./db/postgres-init:/docker-entrypoint-initdb.d:ro
     networks:
       - seentics-network
     restart: unless-stopped
