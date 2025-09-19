@@ -150,7 +150,7 @@ services:
     networks:
       - seentics-network
     restart: unless-stopped
-    command: ["mongod", "--config", "/etc/mongod.conf", "--auth"]
+    command: ["mongod", "--config", "/etc/mongod.conf"]
     healthcheck:
       # mongod responsiveness check; does not require credentials
       test: ["CMD-SHELL", "mongosh --quiet --eval 'quit(db.runCommand({ping: 1}).ok ? 0 : 2)'"]
@@ -168,13 +168,17 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      # Set to 'trust' ONLY if you want to temporarily disable password auth.
+      # This only takes effect on first initialization of the data directory.
+      # POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - timescaledb-data:/var/lib/postgresql/data
       - ./prod/timescaledb/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./prod/timescaledb/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     networks:
       - seentics-network
     restart: unless-stopped
-    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h localhost -p 5432"]
       interval: 5s
