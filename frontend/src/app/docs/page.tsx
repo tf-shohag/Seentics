@@ -17,12 +17,12 @@ const docsSections = [
     title: 'Installation',
   },
   {
-    id: 'funnels',
-    title: 'Funnels',
+    id: 'analytics',
+    title: 'Analytics',
     subsections: [
-      { id: 'funnel-creation', title: 'Creating Funnels' },
-      { id: 'funnel-tracking', title: 'Funnel Tracking' },
-      { id: 'funnel-analytics', title: 'Analytics & Insights' },
+      { id: 'visitor-tracking', title: 'Visitor Tracking' },
+      { id: 'custom-events', title: 'Custom Events' },
+      { id: 'real-time-data', title: 'Real-time Data' },
     ]
   },
   {
@@ -36,12 +36,12 @@ const docsSections = [
     ]
   },
   {
-    id: 'analytics',
-    title: 'Analytics',
+    id: 'funnels',
+    title: 'Funnels',
     subsections: [
-      { id: 'visitor-tracking', title: 'Visitor Tracking' },
-      { id: 'custom-events', title: 'Custom Events' },
-      { id: 'real-time-data', title: 'Real-time Data' },
+      { id: 'funnel-creation', title: 'Creating Funnels' },
+      { id: 'funnel-tracking', title: 'Funnel Tracking' },
+      { id: 'funnel-analytics', title: 'Analytics & Insights' },
     ]
   },
   {
@@ -154,20 +154,11 @@ export default function DocsPage() {
                 </ol>
                 <Card>
                     <CardContent className="p-4">
-                        <pre className="bg-slate-100 dark:bg-slate-800 p-3 rounded-md text-sm overflow-auto"><code className="text-slate-800 dark:text-slate-200">{`<!-- Add this before closing </head> tag -->
-<script>
-  (function() {
-    var script = document.createElement('script');
-    script.src = '${process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000'}/trackers/funnel-tracker.js';
-    script.async = true;
-    script.onload = function() {
-      window.seentics.init({
-        websiteId: 'YOUR_WEBSITE_ID',
-        apiUrl: '${process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000'}/api'
-      });
-    };
-    document.head.appendChild(script);
-  })();
+                        <pre className="bg-slate-100 dark:bg-slate-800 p-3 rounded-md text-sm overflow-auto"><code className="text-slate-800 dark:text-slate-200">{`<!-- Paste this before the closing </head> tag on your site -->
+<script
+  defer
+  src="https://seentics.com/trackers/tracker.js"
+  data-website-id="YOUR_WEBSITE_ID">
 </script>`}</code></pre>
                     </CardContent>
                 </Card>
@@ -176,41 +167,46 @@ export default function DocsPage() {
                 </p>
             </section>
 
-            <section id="funnels">
-                <h2 className="font-headline scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight">Funnels</h2>
-                <p>Funnels help you track user journeys through specific conversion paths on your website. Monitor where users drop off and optimize your conversion rates.</p>
+            <section id="analytics">
+                <h2 className="font-headline scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight">Analytics</h2>
                 
-                <div id="funnel-creation" className="scroll-m-20">
-                    <h3 className="font-headline text-2xl font-semibold tracking-tight">Creating Funnels</h3>
-                    <p>Create multi-step funnels to track user progression through your conversion process:</p>
-                    <ol className="list-decimal pl-6">
-                        <li>Go to your website's Funnels page</li>
-                        <li>Click "Create Funnel" and give it a descriptive name</li>
-                        <li>Add steps by defining page URLs or custom events</li>
-                        <li>Set up step conditions (exact match, contains, starts with)</li>
-                        <li>Activate the funnel to start tracking</li>
-                    </ol>
-                </div>
-
-                <div id="funnel-tracking" className="scroll-m-20">
-                    <h3 className="font-headline text-2xl font-semibold tracking-tight">Funnel Tracking</h3>
-                    <p>Seentics automatically tracks funnel progression with sequential validation:</p>
+                <div id="visitor-tracking" className="scroll-m-20">
+                    <h3 className="font-headline text-2xl font-semibold tracking-tight">Visitor Tracking</h3>
+                    <p>Seentics automatically tracks visitor behavior once the tracking script is installed:</p>
                     <ul className="list-disc pl-6">
-                        <li><strong>Sequential progression</strong>: Users must complete steps in order</li>
-                        <li><strong>Dropoff detection</strong>: Tracks when users leave the funnel</li>
-                        <li><strong>Conversion tracking</strong>: Measures completion rates for each step</li>
-                        <li><strong>Real-time monitoring</strong>: See funnel performance as it happens</li>
+                        <li><strong>Page views</strong>: Every page visit with URL and timestamp</li>
+                        <li><strong>Session tracking</strong>: Groups page views into user sessions</li>
+                        <li><strong>Device detection</strong>: Mobile, tablet, or desktop classification</li>
+                        <li><strong>Traffic sources</strong>: Referrer and UTM parameter tracking</li>
+                        <li><strong>Geographic data</strong>: Country and region information</li>
                     </ul>
                 </div>
 
-                <div id="funnel-analytics" className="scroll-m-20">
-                    <h3 className="font-headline text-2xl font-semibold tracking-tight">Analytics & Insights</h3>
-                    <p>Get detailed insights into funnel performance:</p>
+                <div id="custom-events" className="scroll-m-20">
+                    <h3 className="font-headline text-2xl font-semibold tracking-tight">Custom Events</h3>
+                    <p>Track specific user actions beyond page views:</p>
+                    <Card>
+                        <CardContent className="p-4">
+                            <pre><code className="text-sm">window.seentics.track('button_click');</code></pre>
+                        </CardContent>
+                    </Card>
+                    <p>Common event examples:</p>
                     <ul className="list-disc pl-6">
-                        <li><strong>Step-by-step breakdown</strong>: See completion rates for each step</li>
-                        <li><strong>Daily performance</strong>: Track conversion trends over time</li>
-                        <li><strong>Dropoff analysis</strong>: Identify where users are getting stuck</li>
-                        <li><strong>Conversion optimization</strong>: Use data to improve your funnels</li>
+                        <li><code>form_submit</code> - Form submissions</li>
+                        <li><code>video_play</code> - Video interactions</li>
+                        <li><code>download_start</code> - File downloads</li>
+                        <li><code>signup_complete</code> - User registrations</li>
+                    </ul>
+                </div>
+
+                <div id="real-time-data" className="scroll-m-20">
+                    <h3 className="font-headline text-2xl font-semibold tracking-tight">Real-time Data</h3>
+                    <p>View analytics data as it happens:</p>
+                    <ul className="list-disc pl-6">
+                        <li><strong>Live visitor count</strong>: See current active users</li>
+                        <li><strong>Real-time events</strong>: Track events as they occur</li>
+                        <li><strong>Funnel progression</strong>: Monitor conversions in real-time</li>
+                        <li><strong>Workflow triggers</strong>: See automations as they execute</li>
                     </ul>
                 </div>
             </section>
@@ -265,46 +261,41 @@ export default function DocsPage() {
                 </div>
             </section>
 
-            <section id="analytics">
-                <h2 className="font-headline scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight">Analytics</h2>
+            <section id="funnels">
+                <h2 className="font-headline scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight">Funnels</h2>
+                <p>Funnels help you track user journeys through specific conversion paths on your website. Monitor where users drop off and optimize your conversion rates.</p>
                 
-                <div id="visitor-tracking" className="scroll-m-20">
-                    <h3 className="font-headline text-2xl font-semibold tracking-tight">Visitor Tracking</h3>
-                    <p>Seentics automatically tracks visitor behavior once the tracking script is installed:</p>
+                <div id="funnel-creation" className="scroll-m-20">
+                    <h3 className="font-headline text-2xl font-semibold tracking-tight">Creating Funnels</h3>
+                    <p>Create multi-step funnels to track user progression through your conversion process:</p>
+                    <ol className="list-decimal pl-6">
+                        <li>Go to your website's Funnels page</li>
+                        <li>Click "Create Funnel" and give it a descriptive name</li>
+                        <li>Add steps by defining page URLs or custom events</li>
+                        <li>Set up step conditions (exact match, contains, starts with)</li>
+                        <li>Activate the funnel to start tracking</li>
+                    </ol>
+                </div>
+
+                <div id="funnel-tracking" className="scroll-m-20">
+                    <h3 className="font-headline text-2xl font-semibold tracking-tight">Funnel Tracking</h3>
+                    <p>Seentics automatically tracks funnel progression with sequential validation:</p>
                     <ul className="list-disc pl-6">
-                        <li><strong>Page views</strong>: Every page visit with URL and timestamp</li>
-                        <li><strong>Session tracking</strong>: Groups page views into user sessions</li>
-                        <li><strong>Device detection</strong>: Mobile, tablet, or desktop classification</li>
-                        <li><strong>Traffic sources</strong>: Referrer and UTM parameter tracking</li>
-                        <li><strong>Geographic data</strong>: Country and region information</li>
+                        <li><strong>Sequential progression</strong>: Users must complete steps in order</li>
+                        <li><strong>Dropoff detection</strong>: Tracks when users leave the funnel</li>
+                        <li><strong>Conversion tracking</strong>: Measures completion rates for each step</li>
+                        <li><strong>Real-time monitoring</strong>: See funnel performance as it happens</li>
                     </ul>
                 </div>
 
-                <div id="custom-events" className="scroll-m-20">
-                    <h3 className="font-headline text-2xl font-semibold tracking-tight">Custom Events</h3>
-                    <p>Track specific user actions beyond page views:</p>
-                    <Card>
-                        <CardContent className="p-4">
-                            <pre><code className="text-sm">window.seentics.track('button_click');</code></pre>
-                        </CardContent>
-                    </Card>
-                    <p>Common event examples:</p>
+                <div id="funnel-analytics" className="scroll-m-20">
+                    <h3 className="font-headline text-2xl font-semibold tracking-tight">Analytics & Insights</h3>
+                    <p>Get detailed insights into funnel performance:</p>
                     <ul className="list-disc pl-6">
-                        <li><code>form_submit</code> - Form submissions</li>
-                        <li><code>video_play</code> - Video interactions</li>
-                        <li><code>download_start</code> - File downloads</li>
-                        <li><code>signup_complete</code> - User registrations</li>
-                    </ul>
-                </div>
-
-                <div id="real-time-data" className="scroll-m-20">
-                    <h3 className="font-headline text-2xl font-semibold tracking-tight">Real-time Data</h3>
-                    <p>View analytics data as it happens:</p>
-                    <ul className="list-disc pl-6">
-                        <li><strong>Live visitor count</strong>: See current active users</li>
-                        <li><strong>Real-time events</strong>: Track events as they occur</li>
-                        <li><strong>Funnel progression</strong>: Monitor conversions in real-time</li>
-                        <li><strong>Workflow triggers</strong>: See automations as they execute</li>
+                        <li><strong>Step-by-step breakdown</strong>: See completion rates for each step</li>
+                        <li><strong>Daily performance</strong>: Track conversion trends over time</li>
+                        <li><strong>Dropoff analysis</strong>: Identify where users are getting stuck</li>
+                        <li><strong>Conversion optimization</strong>: Use data to improve your funnels</li>
                     </ul>
                 </div>
             </section>
