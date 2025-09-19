@@ -1,0 +1,215 @@
+version: "3.9"
+
+# Production compose for AWS t3a.medium (2 vCPU, 4GB RAM)
+# - Exposes only Nginx on 80/443
+# - Internal services use Docker network and "expose" only
+# - Secrets and URLs should come from an external env file
+#   Use: docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+
+services:
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Bind mount SSL certs (put fullchain.pem and privkey.pem into ./nginx/ssl)
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api-gateway
+    networks:
+      - seentics-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  api-gateway:
+    build: ./services/gateway
+    container_name: api-gateway
+    expose:
+      - "8080"
+    environment:
+      - API_GATEWAY_PORT=8080
+      - USER_SERVICE_URL=http://user-service:3001
+      - ANALYTICS_SERVICE_URL=http://analytics-service:3002
+      - WORKFLOW_SERVICE_URL=http://workflows-service:3003
+      # Should be in env file with password, e.g. redis://:password@redis:6379
+      - REDIS_URL=${REDIS_URL}
+      - GLOBAL_API_KEY=${GLOBAL_API_KEY}
+    depends_on:
+      - user-service
+      - analytics-service
+      - workflows-service
+      - redis
+    networks:
+      - seentics-network
+    restart: unless-stopped
+
+  user-service:
+    build: ./services/users
+    container_name: user-service
+    expose:
+      - "3001"
+    environment:
+      - PORT=3001
+      # Provide full URI in env file: mongodb://user:pass@mongodb:27017/db?authSource=admin
+      - MONGODB_URI=${USERS_MONGODB_URI}
+      - USER_JWT_SECRET=${JWT_SECRET}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - CORS_ORIGIN=${FRONTEND_URL}
+      - GLOBAL_API_KEY=${GLOBAL_API_KEY}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - seentics-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  analytics-service:
+    build: ./services/analytics
+    container_name: analytics-service
+    expose:
+      - "3002"
+    environment:
+      - ENVIRONMENT=production
+      - PORT=3002
+      # Provide full Postgres URI in env: postgres://user:pass@timescaledb:5432/db?sslmode=disable
+      - DATABASE_URL=${ANALYTICS_DATABASE_URL}
+      - LOG_LEVEL=info
+      - JWT_SECRET=${JWT_SECRET}
+      # Use a proper Redis URL with password
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - GLOBAL_API_KEY=${GLOBAL_API_KEY}
+      - USER_SERVICE_URL=http://user-service:3001
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - seentics-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3002/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  workflows-service:
+    build: ./services/workflows
+    container_name: workflows-service
+    expose:
+      - "3003"
+    environment:
+      - PORT=3003
+      # Provide full URI in env file: mongodb://user:pass@mongodb:27017/seentics_workflows?authSource=admin
+      - MONGODB_URI=${WORKFLOWS_MONGODB_URI}
+      # Use a proper Redis URL with password
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - API_GATEWAY_URL=http://api-gateway:8080
+      - GLOBAL_API_KEY=${GLOBAL_API_KEY}
+      - USERS_SERVICE_URL=http://user-service:3001
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RESEND_FROM=${RESEND_FROM}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - seentics-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3003/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    # No host port exposure in prod; access via network only
+    expose:
+      - "27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - seentics-network
+    restart: unless-stopped
+    command: mongod --auth --wiredTigerCacheSizeGB 1 --maxConns 100
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --username $${MONGO_INITDB_ROOT_USERNAME} --password $${MONGO_INITDB_ROOT_PASSWORD} --eval 'db.adminCommand(\"ping\")'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg14
+    container_name: timescaledb
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - timescaledb-data:/var/lib/postgresql/data
+    networks:
+      - seentics-network
+    restart: unless-stopped
+    command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h localhost -p 5432"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    expose:
+      - "6379"
+    command: sh -c "redis-server --requirepass $$REDIS_PASSWORD --maxmemory 256mb --maxmemory-policy allkeys-lru --save '' --appendonly no"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    networks:
+      - seentics-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  mongo-data:
+  timescaledb-data:
+  redis-data:
+
+networks:
+  seentics-network:
+    driver: bridge
