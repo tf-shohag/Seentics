@@ -193,7 +193,7 @@
     _getApiHost() {
       const config = window.SEENTICS_CONFIG;
       if (config?.apiHost) return config.apiHost;
-      return window.location.hostname === 'localhost' ? 'http://localhost:8080' : 'https://www.api.seentics.com';
+      return window.location.hostname === 'localhost' ? 'http://localhost:8080' : 'https://api.seentics.com';
     },
 
     async _fetchWorkflows() {

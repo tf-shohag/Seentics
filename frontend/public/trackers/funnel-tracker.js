@@ -20,7 +20,7 @@
 
   // Configuration
   const apiHost = window.SEENTICS_CONFIG?.apiHost ||
-    (window.location.hostname === 'localhost' ? 'http://localhost:8080' : 'https://www.api.seentics.com');
+    (window.location.hostname === 'localhost' ? 'http://localhost:8080' : 'https://api.seentics.com');
   const FUNNEL_API_ENDPOINT = `${apiHost}/api/v1/funnels/track`;
 
   // Feature flags

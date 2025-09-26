@@ -26,7 +26,7 @@
       const apiHost = win.SEENTICS_CONFIG?.apiHost ||
         (loc.hostname === 'localhost' ?
           (win.SEENTICS_CONFIG?.devApiHost || 'http://localhost:8080') :
-          'https://www.api.seentics.com');
+          'https://api.seentics.com');
       const API_ENDPOINT = `${apiHost}/api/v1/analytics/event/batch`;
       const DEBUG = !!(win.SEENTICS_CONFIG?.debugMode) && loc.hostname === 'localhost';
 
