@@ -128,7 +128,7 @@ export default function BillingPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white">Billing & Usage</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Billing & Usage</h1>
           <p className="text-lg text-gray-600 dark:text-gray-400 mt-2">
             Manage your subscription and monitor usage across all features
           </p>

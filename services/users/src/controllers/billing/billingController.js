@@ -247,7 +247,7 @@ export const checkUsageLimits = async (req, res) => {
         const axios = (await import('axios')).default;
         const { config } = await import('../../config/config.js');
         
-        const workflowsResponse = await axios.get(`${process.env.WORKFLOW_SERVICE_URL}/api/v1/workflows/?siteId=${website._id}`, {
+        const workflowsResponse = await axios.get(`http://workflows-service:3003/api/v1/workflows?siteId=${website._id}`, {
           headers: {
             'X-API-Key': config.globalApiKey,
             'x-user-id': user._id.toString(),
@@ -259,13 +259,19 @@ export const checkUsageLimits = async (req, res) => {
           timeout: 5000
         });
         
+        console.log(`Workflows response for site ${website._id}:`, workflowsResponse.data);
+        
         if (workflowsResponse.data && Array.isArray(workflowsResponse.data)) {
           actualWorkflowCount += workflowsResponse.data.length || 0;
         } else if (workflowsResponse.data.success && workflowsResponse.data.data) {
           actualWorkflowCount += workflowsResponse.data.data.length || 0;
         }
       } catch (error) {
-        console.warn(`Failed to get workflow count for site ${website._id}:`, error.message);
+        console.error(`Failed to get workflow count for site ${website._id}:`, error.message);
+        if (error.response) {
+          console.error('Response status:', error.response.status);
+          console.error('Response data:', error.response.data);
+        }
       }
     }
 
@@ -275,7 +281,7 @@ export const checkUsageLimits = async (req, res) => {
         const axios = (await import('axios')).default;
         const { config } = await import('../../config/config.js');
         
-        const funnelsResponse = await axios.get(`${process.env.ANALYTICS_SERVICE_URL}/api/v1/funnels/?website_id=${website._id}`, {
+        const funnelsResponse = await axios.get(`http://analytics-service:3002/api/v1/funnels?website_id=${website._id}`, {
           headers: {
             'X-API-Key': config.globalApiKey,
             'x-user-id': user._id.toString(),
@@ -287,11 +293,19 @@ export const checkUsageLimits = async (req, res) => {
           timeout: 5000
         });
         
+        console.log(`Funnels response for site ${website._id}:`, funnelsResponse.data);
+        
         if (funnelsResponse.data.success && funnelsResponse.data.data) {
           actualFunnelCount += funnelsResponse.data.data.length || 0;
+        } else if (funnelsResponse.data && Array.isArray(funnelsResponse.data)) {
+          actualFunnelCount += funnelsResponse.data.length || 0;
         }
       } catch (error) {
-        console.warn(`Failed to get funnel count for site ${website._id}:`, error.message);
+        console.error(`Failed to get funnel count for site ${website._id}:`, error.message);
+        if (error.response) {
+          console.error('Response status:', error.response.status);
+          console.error('Response data:', error.response.data);
+        }
       }
     }
 

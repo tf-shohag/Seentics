@@ -5,6 +5,7 @@ import { WorkflowsTable } from '@/components/workflows-table';
 import { useToast } from '@/hooks/use-toast';
 import { getWorkflows, type Workflow } from '@/lib/workflow-api';
 import { useAuth } from '@/stores/useAuthStore';
+import { useSubscription } from '@/hooks/useSubscription';
 import { useQuery } from '@tanstack/react-query';
 import { PlusCircle } from 'lucide-react';
 import Link from 'next/link';
@@ -17,6 +18,7 @@ export default function WorkflowsPage() {
   const siteId = params?.websiteId as string
   const { user } = useAuth();
   const { toast } = useToast();
+  const { subscription, canCreateWorkflow } = useSubscription();
 
   const { data: workflows = [], isLoading: isLoadingWorkflows } = useQuery<Workflow[]>({
     queryKey: ['workflows', user?._id, siteId],
@@ -24,9 +26,9 @@ export default function WorkflowsPage() {
     enabled: !!user && !!siteId,
   });
 
-  // In open source version, all features are unlimited
-  const canAddWorkflow = true;
-  const planName = 'Open Source';
+  // Use actual subscription limits
+  const canAddWorkflow = canCreateWorkflow;
+  const planName = subscription?.plan || 'Free';
 
   // Derived metrics for stats cards
   const totalWorkflows = workflows?.length || 0;

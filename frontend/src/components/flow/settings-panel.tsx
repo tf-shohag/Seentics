@@ -130,6 +130,17 @@ const NodeSettingsForm: React.FC<{
     fetchFunnels();
   }, []);
 
+  // Ensure frequency is set for action nodes on mount
+  useEffect(() => {
+    const isActionNode = ['Show Modal', 'Show Banner', "Show Notification", 'Insert Section', 'Redirect URL',
+      'Send Email', 'Add/Remove Tag', 'Webhook', 'Track Event', 'Wait'].includes(node.data.title || '');
+    
+    if (isActionNode && !settings.frequency) {
+      const newSettings = { ...settings, frequency: 'once_per_session' as const };
+      onSettingsChange(newSettings);
+    }
+  }, [node.data.title, settings.frequency]);
+
   const handleSettingChange = (key: keyof NodeSettings, value: any) => {
     // Ensure displayMode is always set for modal/banner actions
     let newSettings = { ...settings, [key]: value };
@@ -138,6 +149,14 @@ const NodeSettingsForm: React.FC<{
     if ((node.data.title === 'Show Modal' || node.data.title === 'Show Banner') &&
       !newSettings.displayMode && key !== 'displayMode') {
       newSettings.displayMode = 'simple';
+    }
+
+    // Ensure frequency is always set for action nodes - default to 'once_per_session'
+    const isActionNode = ['Show Modal', 'Show Banner', "Show Notification", 'Insert Section', 'Redirect URL',
+      'Send Email', 'Add/Remove Tag', 'Webhook', 'Track Event', 'Wait'].includes(node.data.title || '');
+    
+    if (isActionNode && !newSettings.frequency && key !== 'frequency') {
+      newSettings.frequency = 'once_per_session' as const;
     }
 
     onSettingsChange(newSettings);

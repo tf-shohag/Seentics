@@ -989,7 +989,19 @@ export async function createFunnel(websiteId: string, funnelData: Omit<Funnel, '
     } else {
       return response.data;
     }
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Error creating funnel:', error);
+    
+    // Check for limit reached error
+    if (error.response?.status === 403 && error.response?.data?.error === 'Funnel limit reached') {
+      throw new Error(`Funnel limit reached! You've reached your plan's funnel limit. Please upgrade to create more funnels.`);
+    }
+    
+    // Check for other limit-related errors  
+    if (error.response?.data?.message?.includes('limit')) {
+      throw new Error(error.response.data.message);
+    }
+    
     throw error;
   }
 }

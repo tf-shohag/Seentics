@@ -299,8 +299,20 @@ export async function addWorkflow(workflow: Partial<Workflow>, userId: string): 
     const res: any = await api.post('/workflows/', cleanData);
     console.log('API response:', res);
     return res?.data;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error adding workflow: ', error);
+    
+    // Check for limit reached error
+    if (error.response?.status === 403 && error.response?.data?.error === 'LIMIT_REACHED') {
+      const errorData = error.response.data.data;
+      throw new Error(`Workflow limit reached! You've used ${errorData.currentUsage}/${errorData.limit} workflows on your ${errorData.currentPlan} plan. Please upgrade to create more workflows.`);
+    }
+    
+    // Check for other limit-related errors
+    if (error.response?.data?.message?.includes('limit')) {
+      throw new Error(error.response.data.message);
+    }
+    
     throw error;
   }
 }

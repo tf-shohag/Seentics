@@ -38,7 +38,7 @@ export default function Developers() {
                   <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-green-500"></div>
                 </div>
                 <pre className="rounded-xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 p-3 sm:p-4 md:p-6 text-xs sm:text-sm md:text-base overflow-auto border border-slate-700 shadow-inner">{`<!-- Include once, ideally in your site layout -->
-<script src="/tracker.js" data-site-id="YOUR_SITE_ID"></script>
+<script src="/trackers/tracker.js" data-site-id="YOUR_SITE_ID"></script>
 
 <!-- Identify after login/signup or when info becomes available -->
 <script>
@@ -122,7 +122,7 @@ window.seentics?.track('purchase_completed', {
                 <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-green-500"></div>
               </div>
               <pre className="rounded-xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 p-3 sm:p-4 md:p-6 text-xs sm:text-sm md:text-base overflow-auto border border-slate-700 shadow-inner">{`// 1. Include the tracker script
-<script src="/tracker.js" data-site-id="YOUR_SITE_ID"></script>
+<script src="/trackers/tracker.js" data-site-id="YOUR_SITE_ID"></script>
 
 // 2. Identify users after login
 function onUserLogin(user) {

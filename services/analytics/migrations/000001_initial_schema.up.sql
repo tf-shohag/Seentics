@@ -131,7 +131,7 @@ SELECT add_compression_policy('events', INTERVAL '7 days', if_not_exists => TRUE
 SELECT add_compression_policy('funnel_events', INTERVAL '7 days', if_not_exists => TRUE);
 SELECT add_compression_policy('custom_events_aggregated', INTERVAL '7 days', if_not_exists => TRUE);
 
--- Add retention policies (keep data for 2 years)
-SELECT add_retention_policy('events', INTERVAL '2 years', if_not_exists => TRUE);
-SELECT add_retention_policy('funnel_events', INTERVAL '2 years', if_not_exists => TRUE);
+-- Add retention policies (keep data for 1 year - standardized retention period)
+SELECT add_retention_policy('events', INTERVAL '1 year', if_not_exists => TRUE);
+SELECT add_retention_policy('funnel_events', INTERVAL '1 year', if_not_exists => TRUE);
 SELECT add_retention_policy('custom_events_aggregated', INTERVAL '1 year', if_not_exists => TRUE);

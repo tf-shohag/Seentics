@@ -44,7 +44,7 @@ func (h *FunnelHandler) CreateFunnel(c *gin.Context) {
 		return
 	}
 
-	// Increment funnel usage counter
+	// Increment funnel usage counter (real-time to database)
 	if userID, exists := c.Get("user_id"); exists {
 		if userIDStr, ok := userID.(string); ok {
 			if err := h.usageTracker.IncrementUsage(userIDStr, "funnels", 1); err != nil {

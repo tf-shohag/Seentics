@@ -26,7 +26,7 @@
       const apiHost = win.SEENTICS_CONFIG?.apiHost ||
         (loc.hostname === 'localhost' ?
           (win.SEENTICS_CONFIG?.devApiHost || 'http://localhost:8080') :
-          `https://${loc.hostname}`);
+          'https://www.api.seentics.com');
       const API_ENDPOINT = `${apiHost}/api/v1/analytics/event/batch`;
       const DEBUG = !!(win.SEENTICS_CONFIG?.debugMode) && loc.hostname === 'localhost';
 
@@ -181,6 +181,7 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(batchData),
+              credentials: 'omit', // Explicitly omit credentials for public tracking
               keepalive: true
             });
           }
@@ -192,6 +193,46 @@
       }
 
       // --- Custom Event Tracking ---
+
+      // Cache for session-level data to avoid repetition
+      let sessionData = null;
+      let lastReferrer = null;
+      let deviceInfo = null;
+
+      function getDeviceInfo() {
+        if (deviceInfo) return deviceInfo;
+        
+        const ua = nav.userAgent;
+        deviceInfo = {
+          browser: getBrowser(ua),
+          device: getDevice(ua),
+          os: getOS(ua)
+        };
+        return deviceInfo;
+      }
+
+      function getBrowser(ua) {
+        if (ua.includes('Chrome')) return 'Chrome';
+        if (ua.includes('Firefox')) return 'Firefox';
+        if (ua.includes('Safari')) return 'Safari';
+        if (ua.includes('Edge')) return 'Edge';
+        return 'Other';
+      }
+
+      function getDevice(ua) {
+        if (/iPad|Android(?=.*Mobile)|PlayBook|Silk/i.test(ua)) return 'Tablet';
+        if (/Mobi|Android/i.test(ua)) return 'Mobile';
+        return 'Desktop';
+      }
+
+      function getOS(ua) {
+        if (ua.includes('Windows')) return 'Windows';
+        if (ua.includes('Mac')) return 'macOS';
+        if (ua.includes('Linux')) return 'Linux';
+        if (ua.includes('Android')) return 'Android';
+        if (ua.includes('iOS')) return 'iOS';
+        return 'Other';
+      }
 
       function trackCustomEvent(eventName, properties = {}) {
         if (!siteId || !eventName || typeof eventName !== 'string') {
@@ -207,11 +248,26 @@
           session_id: sessionId,
           event_type: eventName,
           page: loc.pathname,
-          referrer: doc.referrer || null,
-          user_agent: nav.userAgent,
           properties,
           timestamp: new Date().toISOString()
         };
+
+        // Only include referrer if it's new or first event in session
+        const currentReferrer = doc.referrer || null;
+        if (currentReferrer !== lastReferrer) {
+          event.referrer = currentReferrer;
+          lastReferrer = currentReferrer;
+        }
+
+        // Include device info only once per session
+        if (!sessionData || sessionData.sessionId !== sessionId) {
+          const deviceData = getDeviceInfo();
+          event.browser = deviceData.browser;
+          event.device = deviceData.device;
+          event.os = deviceData.os;
+          
+          sessionData = { sessionId, deviceData };
+        }
 
         queueEvent(event);
 
@@ -244,12 +300,15 @@
         return cachedUTMParams;
       }
 
+      // Cache UTM parameters to avoid repetition
+      let cachedUTMData = null;
+      let lastUTMUrl = '';
+
       function sendPageview() {
         if (pageviewSent || !siteId || isDestroyed) return;
 
         const timeOnPage = Math.round((performance.now() - pageStartTime) / 1000);
-        const utmParams = extractUTMParameters();
-
+        
         refreshSessionIfNeeded();
 
         const event = {
@@ -258,15 +317,43 @@
           session_id: sessionId,
           event_type: 'pageview',
           page: loc.pathname,
-          referrer: doc.referrer || null,
-          user_agent: nav.userAgent,
           time_on_page: timeOnPage,
-          timestamp: new Date().toISOString(),
-          ...utmParams
+          timestamp: new Date().toISOString()
         };
 
+        // Only include referrer if it's new or first pageview in session
+        const currentReferrer = doc.referrer || null;
+        if (currentReferrer !== lastReferrer) {
+          event.referrer = currentReferrer;
+          lastReferrer = currentReferrer;
+        }
+
+        // Include device info only once per session
+        if (!sessionData || sessionData.sessionId !== sessionId) {
+          const deviceData = getDeviceInfo();
+          event.browser = deviceData.browser;
+          event.device = deviceData.device;
+          event.os = deviceData.os;
+          
+          sessionData = { sessionId, deviceData };
+        }
+
+        // Only include UTM parameters if they've changed
+        const currentUTMUrl = loc.search;
+        if (currentUTMUrl !== lastUTMUrl || !cachedUTMData) {
+          const utmParams = extractUTMParameters();
+          // Only include UTM params that have values
+          Object.keys(utmParams).forEach(key => {
+            if (utmParams[key]) {
+              event[key] = utmParams[key];
+            }
+          });
+          cachedUTMData = utmParams;
+          lastUTMUrl = currentUTMUrl;
+        }
+
         pageviewSent = true;
-        queueEvent(event); // Use batching instead of direct send
+        queueEvent(event);
       }
 
       // --- Automatic event handlers removed - users can manually call seentics.track() ---

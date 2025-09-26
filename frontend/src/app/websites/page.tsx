@@ -7,6 +7,7 @@ import { addWebsite, getWebsites, deleteWebsite, Website } from '@/lib/websites-
 import { getTrafficSummary, type TrafficSummary } from '@/lib/analytics-api';
 import { useAuth } from '@/stores/useAuthStore';
 import { useToast } from '@/hooks/use-toast';
+import { useSubscription } from '@/hooks/useSubscription';
 
 // Import our new modular components
 import { WebsitesHeader } from '@/components/websites/websites-header';
@@ -19,7 +20,7 @@ export default function WebsitesPage() {
   const { user } = useAuth();
   const [websites, setWebsites] = useState<Website[]>([]);
   const [isLoadingWebsites, setIsLoadingWebsites] = useState(true);
-  const [subscription, setSubscription] = useState<any>(null);
+  const { subscription, canCreateWebsite } = useSubscription();
   const [siteStats, setSiteStats] = useState<Record<string, { pageviews: number; unique: number }>>({});
   
   // Modal states
@@ -49,8 +50,6 @@ export default function WebsitesPage() {
       setIsLoadingWebsites(false);
     }
   };
-
-  // Open source version - no subscription needed
 
   // Initial data fetch
   useEffect(() => {
@@ -96,9 +95,9 @@ export default function WebsitesPage() {
     };
   }, [websites]);
 
-  // Open source version - unlimited websites
-  const canAddWebsite = true;
-  const planName = 'Open Source';
+  // Use actual subscription limits
+  const canAddWebsite = canCreateWebsite;
+  const planName = subscription?.plan || 'Free';
 
   const handleCreateWebsite = async (website: { name: string; url: string }) => {
     if (!canAddWebsite) {

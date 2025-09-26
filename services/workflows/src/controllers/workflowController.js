@@ -26,25 +26,7 @@ export const create = async (req, res, next) => {
 
     const workflow = await workflowService.createWorkflow(req.body, userId);
     
-    // Increment workflow usage counter - always try to increment, not just when subscriptionUsage exists
-    try {
-      await axios.post(`${config.usersServiceUrl}/api/v1/user/billing/usage/increment`, {
-        type: 'workflows',
-        count: 1
-      }, {
-        headers: {
-          'X-API-Key': config.globalApiKey,
-          'X-User-ID': userId,
-          'X-User-Email': req.headers['x-user-email'],
-          'X-User-Plan': req.headers['x-user-plan'],
-          'X-User-Status': req.headers['x-user-status']
-        }
-      });
-      logger.info('Successfully incremented workflow usage counter for user:', userId);
-    } catch (error) {
-      logger.error('Failed to increment workflow usage:', error);
-      // Don't fail the request if usage increment fails
-    }
+    // Usage increment is handled by middleware, no need to duplicate here
     
     res.status(201).json(workflow);
   } catch (error) {
@@ -155,9 +137,9 @@ export const deleteWorkflow = async (req, res, next) => {
     
     // Decrement workflow usage counter
     try {
-      await axios.post(`${config.usersServiceUrl}/api/v1/user/billing/usage/increment`, {
+      await axios.post(`${config.usersServiceUrl}/api/v1/user/billing/usage/decrement`, {
         type: 'workflows',
-        count: -1
+        count: 1
       }, {
         headers: {
           'X-API-Key': config.globalApiKey,

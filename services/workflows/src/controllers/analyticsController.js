@@ -35,20 +35,8 @@ export const trackBatchEvents = async (req, res, next) => {
       return res.status(400).json({ error: 'Events array is required' });
     }
 
-    // Process each event in the batch
-    const promises = events.map(async (event) => {
-      // Process the event through analytics service
-      await analyticsService.trackWorkflowEvent(event);
-
-      // Update workflow counters for main events (both old and new event types)
-      if (event.type === 'Trigger' || event.analytics_event_type === 'workflow_trigger') {
-        await workflowService.incrementTriggers(event.workflowId || event.workflow_id);
-      } else if (event.type === 'Action Executed' || event.analytics_event_type === 'action_completed') {
-        await workflowService.incrementCompletions(event.workflowId || event.workflow_id);
-      }
-    });
-
-    await Promise.all(promises);
+    // Process events in batches for better performance
+    await analyticsService.trackBatchWorkflowEvents(events);
 
     res.json({ success: true, processed: events.length });
   } catch (error) {

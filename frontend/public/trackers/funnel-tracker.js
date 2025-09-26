@@ -20,7 +20,7 @@
 
   // Configuration
   const apiHost = window.SEENTICS_CONFIG?.apiHost ||
-    (window.location.hostname === 'localhost' ? 'http://localhost:8080' : `https://${window.location.hostname}`);
+    (window.location.hostname === 'localhost' ? 'http://localhost:8080' : 'https://www.api.seentics.com');
   const FUNNEL_API_ENDPOINT = `${apiHost}/api/v1/funnels/track`;
 
   // Feature flags
@@ -87,14 +87,28 @@
 
       // Load from cache first
       const cacheKey = `${FUNNEL_STATE_KEY}_${siteId}`;
+      const cacheTimestampKey = `${cacheKey}_timestamp`;
       const savedFunnels = localStorage.getItem(cacheKey);
+      const cacheTimestamp = localStorage.getItem(cacheTimestampKey);
+      
+      // Check if cache is still valid (1 hour)
+      const cacheAge = Date.now() - (parseInt(cacheTimestamp) || 0);
+      const cacheValid = cacheAge < 3600000; // 1 hour
 
-      if (savedFunnels) {
+      if (savedFunnels && cacheValid) {
         try {
           const funnels = JSON.parse(savedFunnels);
-          initializeFunnels(funnels);
-          funnelsValidated = false;
-          if (DEBUG) console.log('🔍 Seentics: Loaded cached funnels:', funnels.length);
+          // Only load essential funnel data, not full definitions
+          const lightweightFunnels = funnels.map(f => ({
+            id: f.id,
+            name: f.name,
+            steps: f.steps?.map(s => ({ url: s.url, event: s.event })) || [],
+            isActive: f.isActive
+          }));
+          initializeFunnels(lightweightFunnels);
+          funnelsValidated = true; // Mark as validated to avoid server call
+          if (DEBUG) console.log('🔍 Seentics: Loaded cached funnels:', lightweightFunnels.length);
+          return;
         } catch (error) {
           console.warn('🔍 Seentics: Error loading cached funnels:', error);
         }
@@ -105,16 +119,12 @@
       if (DEBUG) console.log('🔍 Seentics: Fetching funnels from analytics service:', apiUrl);
 
       // For public funnel tracking, we don't need authentication
-      // This endpoint is designed for tracker scripts on public websites
-      const headers = {
-        'Content-Type': 'application/json'
-      };
-
-      if (DEBUG) console.log('🔍 Seentics: Request headers (public):', headers);
-
       const response = await fetch(apiUrl, {
         method: 'GET',
-        headers,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'omit', // Explicitly omit credentials for public tracking
         keepalive: true
       });
 
@@ -436,6 +446,7 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(event),
+            credentials: 'omit', // Explicitly omit credentials for public tracking
             keepalive: true
           });
         }

@@ -213,14 +213,27 @@ func setupRouter(
 	// Health check with buffer stats
 	router.GET("/health", healthHandler.HealthCheck)
 
+	// Initialize subscription middleware
+	subscriptionMiddleware := middleware.NewSubscriptionMiddleware(logger)
+	
+	// Usage cache stats endpoint for monitoring
+	router.GET("/usage-stats", func(c *gin.Context) {
+		stats := subscriptionMiddleware.GetUsageCacheStats()
+		c.JSON(200, gin.H{
+			"success": true,
+			"data":    stats,
+		})
+	})
+
 	// API routes
 	v1 := router.Group("/api/v1")
 	{
 		// Analytics routes
 		analytics := v1.Group("/analytics")
 		{
-			analytics.POST("/event", eventHandler.TrackEvent)
-			analytics.POST("/event/batch", eventHandler.TrackBatchEvents)
+			// Event tracking routes with usage limit enforcement
+			analytics.POST("/event", subscriptionMiddleware.CheckEventLimit(), eventHandler.TrackEvent)
+			analytics.POST("/event/batch", subscriptionMiddleware.CheckBatchEventLimit(), eventHandler.TrackBatchEvents)
 			analytics.GET("/dashboard/:website_id", analyticsHandler.GetDashboard)
 
 			analytics.GET("/top-pages/:website_id", analyticsHandler.GetTopPages)
@@ -246,9 +259,6 @@ func setupRouter(
 		// Funnel routes (authenticated)
 		funnels := v1.Group("/funnels")
 		{
-			// Initialize subscription middleware
-			subscriptionMiddleware := middleware.NewSubscriptionMiddleware(logger)
-			
 			funnels.POST("/", subscriptionMiddleware.CheckFunnelLimit(), funnelHandler.CreateFunnel)
 			funnels.GET("/", funnelHandler.GetFunnels)
 			funnels.GET("/:funnel_id", funnelHandler.GetFunnel)

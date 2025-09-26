@@ -51,9 +51,15 @@ export const createWorkflow = async (workflowData, userId) => {
       ...cleanData,
       userId,
       status: cleanData.status || 'Draft',
-      totalTriggers: 0,
-      totalCompletions: 0,
-      completionRate: '0.0%'
+      analytics: {
+        totalTriggers: 0,
+        totalCompletions: 0,
+        totalRuns: 0,
+        successfulRuns: 0,
+        failedRuns: 0,
+        averageCompletionTime: 0,
+        nodeStats: new Map()
+      }
     });
 
     const savedWorkflow = await workflowDoc.save();
@@ -85,14 +91,14 @@ export const getWorkflow = async (workflowId, userId) => {
     }
 
     const obj = workflow.toObject();
-    const triggers = obj.totalTriggers || 0;
-    const completions = obj.totalCompletions || 0;
+    const triggers = obj.analytics?.totalTriggers || 0;
+    const completions = obj.analytics?.totalCompletions || 0;
     const rate = triggers > 0 ? Math.min(100, (completions / triggers) * 100) : 0;
-    const clamped = `${rate.toFixed(1)}%`;
+    const completionRate = `${rate.toFixed(1)}%`;
     return {
       id: workflow._id.toString(),
       ...obj,
-      completionRate: clamped,
+      completionRate, // Computed field for backward compatibility
     };
   } catch (error) {
     logger.error('Error getting workflow:', error);
@@ -194,16 +200,16 @@ export const getWorkflows = async (userId, filters = {}) => {
         .lean();
       
       return workflows.map(workflow => {
-        // Recalculate completion rate for consistency with getWorkflow method
-        const triggers = workflow.totalTriggers || 0;
-        const completions = workflow.totalCompletions || 0;
+        // Calculate completion rate from analytics data
+        const triggers = workflow.analytics?.totalTriggers || 0;
+        const completions = workflow.analytics?.totalCompletions || 0;
         const rate = triggers > 0 ? Math.min(100, (completions / triggers) * 100) : 0;
-        const clamped = `${rate.toFixed(1)}%`;
+        const completionRate = `${rate.toFixed(1)}%`;
         
         return {
           id: workflow._id.toString(),
           ...workflow,
-          completionRate: clamped, // Use recalculated value instead of stored value
+          completionRate, // Computed field for backward compatibility
         };
       });
     } catch (error) {
@@ -221,16 +227,16 @@ export const getActiveWorkflows = async (siteId) => {
       }).lean();
       
       return workflows.map(workflow => {
-        // Recalculate completion rate for consistency with getWorkflow method
-        const triggers = workflow.totalTriggers || 0;
-        const completions = workflow.totalCompletions || 0;
+        // Calculate completion rate from analytics data
+        const triggers = workflow.analytics?.totalTriggers || 0;
+        const completions = workflow.analytics?.totalCompletions || 0;
         const rate = triggers > 0 ? Math.min(100, (completions / triggers) * 100) : 0;
-        const clamped = `${rate.toFixed(1)}%`;
+        const completionRate = `${rate.toFixed(1)}%`;
         
         return {
           id: workflow._id.toString(),
           ...workflow,
-          completionRate: clamped, // Use recalculated value instead of stored value
+          completionRate, // Computed field for backward compatibility
         };
       });
     } catch (error) {
@@ -254,17 +260,17 @@ export const incrementTriggers = async (workflowId) => {
         return;
       }
       
-      const newTriggers = (workflow.totalTriggers || 0) + 1;
-      const raw = newTriggers > 0 ? (workflow.totalCompletions / newTriggers) * 100 : 0;
-      const clamped = Math.min(100, Math.max(0, raw));
-      const completionRate = `${clamped.toFixed(1)}%`;
-      
       await Workflow.findByIdAndUpdate(workflowId, {
-        totalTriggers: newTriggers,
-        completionRate
+        $inc: {
+          'analytics.totalTriggers': 1,
+          'analytics.totalRuns': 1
+        },
+        $set: {
+          'analytics.lastTriggered': new Date()
+        }
       });
       
-      logger.debug(`Workflow triggers incremented: ${workflowId} (${newTriggers})`);
+      logger.debug(`Workflow triggers incremented: ${workflowId}`);
     } catch (error) {
       logger.error('Error incrementing triggers:', error);
       // Don't throw error for analytics operations
@@ -286,17 +292,14 @@ export const incrementCompletions = async (workflowId) => {
       return;
     }
     
-    const newCompletions = (workflow.totalCompletions || 0) + 1;
-    const raw = workflow.totalTriggers > 0 ? (newCompletions / workflow.totalTriggers) * 100 : 0;
-    const clamped = Math.min(100, Math.max(0, raw));
-    const completionRate = `${clamped.toFixed(1)}%`;
-    
     await Workflow.findByIdAndUpdate(workflowId, {
-      totalCompletions: newCompletions,
-      completionRate
+      $inc: {
+        'analytics.totalCompletions': 1,
+        'analytics.successfulRuns': 1
+      }
     });
     
-    logger.debug(`Workflow completions incremented: ${workflowId} (${newCompletions})`);
+    logger.debug(`Workflow completions incremented: ${workflowId}`);
   } catch (error) {
     logger.error('Error incrementing completions:', error);
     // Don't throw error for analytics operations

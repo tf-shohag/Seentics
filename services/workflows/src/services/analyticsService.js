@@ -2,6 +2,135 @@ import { WorkflowEvent, DailyAggregation } from '../models/WorkflowEvent.js';
 import Workflow from '../models/Workflow.js';
 import { logger } from '../utils/logger.js';
 
+// Track batch workflow events (optimized)
+export const trackBatchWorkflowEvents = async (events) => {
+    try {
+      if (!Array.isArray(events) || events.length === 0) {
+        return { success: true, processed: 0 };
+      }
+
+      // Group events by workflow for bulk updates
+      const workflowUpdates = new Map();
+      
+      for (const eventData of events) {
+        // Handle both old and new optimized analytics event structures
+        let processedData = eventData;
+        
+        if (eventData.event_type === 'workflow_analytics') {
+          processedData = {
+            workflowId: eventData.workflow_id,
+            visitorId: eventData.visitor_id,
+            sessionId: eventData.session_id,
+            nodeId: eventData.node_id,
+            nodeTitle: eventData.node_title,
+            event: eventData.analytics_event_type,
+            runId: eventData.runId,
+            nodeType: eventData.nodeType,
+            triggerType: eventData.triggerType,
+            actionType: eventData.actionType,
+            conditionType: eventData.conditionType,
+            result: eventData.result,
+            status: eventData.status,
+            frequency: eventData.frequency,
+            reason: eventData.reason,
+            error: eventData.error,
+            totalNodes: eventData.totalNodes,
+            timestamp: new Date(eventData.timestamp || Date.now())
+          };
+        } else if (eventData.t === 'wf') {
+          // Handle optimized workflow tracking payload
+          processedData = {
+            workflowId: eventData.wf,
+            visitorId: eventData.v,
+            sessionId: eventData.s,
+            nodeId: eventData.n,
+            nodeTitle: eventData.nt,
+            event: eventData.e,
+            result: eventData.r,
+            status: eventData.st || 'success',
+            error: eventData.err,
+            timestamp: new Date(eventData.ts || Date.now())
+          };
+        }
+
+        const workflowId = processedData.workflowId;
+        if (!workflowId) continue;
+
+        if (!workflowUpdates.has(workflowId)) {
+          workflowUpdates.set(workflowId, {
+            $inc: {},
+            $set: {},
+            nodeStats: new Map()
+          });
+        }
+
+        const update = workflowUpdates.get(workflowId);
+        const nodeStatsKey = `analytics.nodeStats.${processedData.nodeId}`;
+
+        // Aggregate updates by event type
+        switch (processedData.event) {
+          case 'workflow_trigger':
+            update.$inc['analytics.totalTriggers'] = (update.$inc['analytics.totalTriggers'] || 0) + 1;
+            update.$inc['analytics.totalRuns'] = (update.$inc['analytics.totalRuns'] || 0) + 1;
+            update.$inc[`${nodeStatsKey}.triggers`] = (update.$inc[`${nodeStatsKey}.triggers`] || 0) + 1;
+            update.$set['analytics.lastTriggered'] = new Date();
+            break;
+
+          case 'workflow_completed':
+            update.$inc['analytics.successfulRuns'] = (update.$inc['analytics.successfulRuns'] || 0) + 1;
+            break;
+
+          case 'workflow_stopped':
+            update.$inc['analytics.failedRuns'] = (update.$inc['analytics.failedRuns'] || 0) + 1;
+            break;
+
+          case 'condition_evaluated':
+            const conditionField = processedData.result === 'passed' ? 'conditionsPassed' : 'conditionsFailed';
+            update.$inc[`${nodeStatsKey}.${conditionField}`] = (update.$inc[`${nodeStatsKey}.${conditionField}`] || 0) + 1;
+            break;
+
+          case 'action_completed':
+            update.$inc['analytics.totalCompletions'] = (update.$inc['analytics.totalCompletions'] || 0) + 1;
+            update.$inc[`${nodeStatsKey}.completions`] = (update.$inc[`${nodeStatsKey}.completions`] || 0) + 1;
+            break;
+
+          case 'action_failed':
+            update.$inc[`${nodeStatsKey}.failures`] = (update.$inc[`${nodeStatsKey}.failures`] || 0) + 1;
+            break;
+        }
+      }
+
+      // Execute bulk updates
+      const bulkOps = [];
+      for (const [workflowId, update] of workflowUpdates) {
+        if (Object.keys(update.$inc).length > 0 || Object.keys(update.$set).length > 0) {
+          const updateDoc = {};
+          if (Object.keys(update.$inc).length > 0) updateDoc.$inc = update.$inc;
+          if (Object.keys(update.$set).length > 0) updateDoc.$set = update.$set;
+
+          bulkOps.push({
+            updateOne: {
+              filter: { _id: workflowId },
+              update: updateDoc,
+              upsert: false
+            }
+          });
+        }
+      }
+
+      if (bulkOps.length > 0) {
+        await Workflow.bulkWrite(bulkOps);
+      }
+
+      logger.debug(`Batch processed ${events.length} workflow events for ${workflowUpdates.size} workflows`);
+      
+      return { success: true, processed: events.length };
+    } catch (error) {
+      logger.error('Error tracking batch workflow events:', error);
+      throw error;
+    }
+};
+
 // Track workflow event
 export const trackWorkflowEvent = async (eventData) => {
     try {

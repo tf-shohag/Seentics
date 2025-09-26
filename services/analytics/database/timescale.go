@@ -20,7 +20,7 @@ func DefaultTimescaleConfig() *TimescaleConfig {
 	return &TimescaleConfig{
 		ChunkTimeInterval: "1 day",
 		CompressionAfter:  "7 days",
-		RetentionPeriod:   "90 days",
+		RetentionPeriod:   "1 year",
 	}
 }
 
@@ -31,9 +31,9 @@ func ConnectTimescale(databaseURL string) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("failed to parse database URL: %w", err)
 	}
 
-	// TimescaleDB-optimized connection pool settings
-	config.MaxConns = 50                   // Higher for analytics workloads
-	config.MinConns = 10                   // Keep more connections warm
+	// Optimized connection pool settings for high-throughput analytics
+	config.MaxConns = 100                  // Increased from 50 for better concurrency
+	config.MinConns = 25                   // Increased from 10 for better warmup
 	config.MaxConnLifetime = 2 * time.Hour // Longer for stable connections
 	config.MaxConnIdleTime = 15 * time.Minute
 	config.HealthCheckPeriod = 1 * time.Minute

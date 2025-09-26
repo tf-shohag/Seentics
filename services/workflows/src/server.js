@@ -12,6 +12,7 @@ import { apiKeyMiddleware } from './middleware/apiKeyMiddleware.js';
 import { initializeMongoDB } from './config/mongodb.js';
 import { initializeRedis } from './config/redis.js';
 import { initializeQueues } from './services/queueService.js';
+import aggregationService from './services/aggregationService.js';
 
 // Route imports
 import workflowRoutes from './routes/workflowRoutes.js';
@@ -71,6 +72,9 @@ async function initializeServices() {
     await initializeMongoDB();
     await initializeRedis();
     await initializeQueues();
+    
+    // Start aggregation service cron jobs
+    aggregationService.start();
 
     logger.info('All services initialized successfully');
   } catch (error) {

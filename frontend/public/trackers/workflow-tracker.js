@@ -103,6 +103,7 @@
     };
   };
 
+
   // --- Analytics Manager ---
   class AnalyticsManager {
     constructor(apiHost, siteId) {
@@ -134,6 +135,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ siteId: this.siteId, events }),
+          credentials: 'omit', // Explicitly omit credentials for public tracking
           keepalive: true
         });
       } catch (error) {
@@ -191,12 +193,14 @@
     _getApiHost() {
       const config = window.SEENTICS_CONFIG;
       if (config?.apiHost) return config.apiHost;
-      return window.location.hostname === 'localhost' ? 'http://localhost:8080' : `https://${window.location.hostname}`;
+      return window.location.hostname === 'localhost' ? 'http://localhost:8080' : 'https://www.api.seentics.com';
     },
 
     async _fetchWorkflows() {
       try {
-        const response = await fetch(`${this._getApiHost()}/api/v1/workflows/site/${this.siteId}/active`);
+        const response = await fetch(`${this._getApiHost()}/api/v1/workflows/site/${this.siteId}/active`, {
+      credentials: 'omit' // Explicitly omit credentials for public tracking
+    });
         const data = await response.json();
         this.activeWorkflows = data?.workflows?.filter(w => w.status === 'Active') || [];
         this._setupTriggers();
@@ -308,6 +312,17 @@
 
     async _executeWorkflow(workflow, currentNode) {
       const runId = generateId();
+      
+      // Check if any actions in this workflow will actually execute
+      // Don't track trigger if all actions are frequency-limited
+      const willExecuteAnyAction = this._willWorkflowExecuteActions(workflow);
+      
+      if (!willExecuteAnyAction) {
+        // Don't track trigger or execute workflow if no actions will run
+        return;
+      }
+
+      // Track trigger only if workflow will actually execute
       this._trackEvent(workflow, currentNode, 'workflow_trigger', {
         runId,
         triggerType: currentNode.data?.title,
@@ -315,6 +330,8 @@
       });
 
       let node = currentNode;
+      let workflowExecuted = false;
+      
       while (node) {
         if (node.data?.type === 'Condition') {
           const conditionResult = this._evaluateCondition(node);
@@ -337,6 +354,8 @@
           const frequencyAllowed = this._checkActionFrequency(node, workflow);
 
           if (frequencyAllowed) {
+            workflowExecuted = true;
+            
             this._trackEvent(workflow, node, 'action_started', {
               runId,
               actionType: node.data?.title,
@@ -364,28 +383,46 @@
               });
             }
           } else {
-            this._trackEvent(workflow, node, 'action_skipped', {
-              runId,
-              actionType: node.data?.title,
-              nodeType: 'action',
-              reason: 'frequency_limit',
-              frequency: node.data?.settings?.frequency
-            });
+            // Don't track skipped actions for frequency limits
+            // This prevents unnecessary database entries
           }
         }
 
         node = this._getNextNode(workflow, node);
       }
 
-      this._trackEvent(workflow, null, 'workflow_completed', {
-        runId,
-        totalNodes: workflow.nodes?.length || 0
-      });
+      // Only track completion if workflow actually executed
+      if (workflowExecuted) {
+        this._trackEvent(workflow, null, 'workflow_completed', {
+          runId,
+          totalNodes: workflow.nodes?.length || 0
+        });
+      }
+    },
+
+    // Check if any actions in the workflow will execute (not frequency-limited)
+    _willWorkflowExecuteActions(workflow) {
+      try {
+        const actionNodes = workflow.nodes?.filter(n => n.data?.type === 'Action') || [];
+        
+        // If no actions, workflow won't execute anything meaningful
+        if (actionNodes.length === 0) {
+          return false;
+        }
+
+        // Check if at least one action will execute
+        return actionNodes.some(actionNode => {
+          return this._checkActionFrequency(actionNode, workflow);
+        });
+      } catch (error) {
+        console.warn('[Seentics] Error checking workflow execution:', error);
+        return true; // Default to allowing execution on error
+      }
     },
 
     _checkActionFrequency(actionNode, workflow) {
       try {
-        const frequency = actionNode.data?.settings?.frequency || FREQUENCY_TYPES.EVERY_TRIGGER;
+        const frequency = actionNode.data?.settings?.frequency || FREQUENCY_TYPES.ONCE_PER_SESSION;
 
         if (frequency === FREQUENCY_TYPES.EVERY_TRIGGER) {
           return true;
@@ -534,6 +571,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        credentials: 'omit', // Explicitly omit credentials for public tracking
         keepalive: true
       }).catch(error => console.warn('[Seentics] Server action failed:', error));
     },
@@ -548,16 +586,13 @@
 
       const overlay = document.createElement('div');
       overlay.className = 'seentics-overlay';
-      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:999999;display:flex;align-items:center;justify-content:center;';
 
       const modal = document.createElement('div');
       modal.className = 'seentics-modal';
-      modal.style.cssText = 'background:white;padding:20px;border-radius:8px;max-width:500px;position:relative;';
 
       if (settings.modalTitle) {
         const title = document.createElement('h2');
         title.textContent = settings.modalTitle;
-        title.style.cssText = 'margin:0 0 10px 0;';
         modal.appendChild(title);
       }
 
@@ -569,7 +604,7 @@
 
       const closeBtn = document.createElement('button');
       closeBtn.innerHTML = '×';
-      closeBtn.style.cssText = 'position:absolute;top:10px;right:15px;border:none;background:none;font-size:20px;cursor:pointer;';
+      closeBtn.className = 'seentics-close-button';
       closeBtn.onclick = () => document.body.removeChild(overlay);
       modal.appendChild(closeBtn);
 
@@ -585,17 +620,16 @@
       if (!settings.bannerContent) return;
 
       const banner = document.createElement('div');
-      banner.className = 'seentics-banner';
-      const position = settings.bannerPosition === 'bottom' ? 'bottom:0;' : 'top:0;';
-      banner.style.cssText = `position:fixed;left:0;width:100%;${position}background:#333;color:white;padding:10px;z-index:999998;display:flex;align-items:center;justify-content:space-between;`;
+      banner.className = `seentics-banner ${settings.bannerPosition === 'bottom' ? 'seentics-banner-bottom' : 'seentics-banner-top'}`;
 
-      const content = document.createElement('span');
-      content.textContent = settings.bannerContent;
+      const content = document.createElement('div');
+      content.className = 'seentics-banner-content';
+      content.innerHTML = `<p>${settings.bannerContent}</p>`;
       banner.appendChild(content);
 
       const closeBtn = document.createElement('button');
       closeBtn.innerHTML = '×';
-      closeBtn.style.cssText = 'border:none;background:none;color:white;font-size:18px;cursor:pointer;';
+      closeBtn.className = 'seentics-close-button';
       closeBtn.onclick = () => document.body.removeChild(banner);
       banner.appendChild(closeBtn);
 
@@ -607,128 +641,38 @@
 
       // Create notification container
       const notification = document.createElement('div');
-      notification.className = 'seentics-notification';
-
-      // Position settings
       const position = settings.notificationPosition || 'top-right';
-      let positionStyles = '';
-
-      switch (position) {
-        case 'top-left':
-          positionStyles = 'top:20px;left:20px;';
-          break;
-        case 'top-right':
-          positionStyles = 'top:20px;right:20px;';
-          break;
-        case 'bottom-left':
-          positionStyles = 'bottom:20px;left:20px;';
-          break;
-        case 'bottom-right':
-          positionStyles = 'bottom:20px;right:20px;';
-          break;
-        case 'top-center':
-          positionStyles = 'top:20px;left:50%;transform:translateX(-50%);';
-          break;
-        case 'bottom-center':
-          positionStyles = 'bottom:20px;left:50%;transform:translateX(-50%);';
-          break;
-        default:
-          positionStyles = 'top:20px;right:20px;';
-      }
-
-      // Notification type styling
       const type = settings.notificationType || 'info';
-      let typeStyles = '';
-      let icon = '';
+      
+      notification.className = `seentics-notification ${position} ${type}`;
 
-      switch (type) {
-        case 'success':
-          typeStyles = 'background:#4CAF50;color:white;';
-          icon = '✓';
-          break;
-        case 'error':
-          typeStyles = 'background:#f44336;color:white;';
-          icon = '✕';
-          break;
-        case 'warning':
-          typeStyles = 'background:#ff9800;color:white;';
-          icon = '⚠';
-          break;
-        case 'info':
-        default:
-          typeStyles = 'background:#2196F3;color:white;';
-          icon = 'ℹ';
-      }
-
-      // Base styles
-      const baseStyles = `
-        position:fixed;
-        ${positionStyles}
-        ${typeStyles}
-        padding:12px 16px;
-        border-radius:6px;
-        box-shadow:0 4px 12px rgba(0,0,0,0.15);
-        z-index:999999;
-        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-        font-size:14px;
-        max-width:350px;
-        min-width:250px;
-        display:flex;
-        align-items:center;
-        gap:8px;
-        animation:seenticsSlideIn 0.3s ease-out;
-      `;
-
-      notification.style.cssText = baseStyles;
-
-      // Add animation keyframes if not already added
-      if (!document.querySelector('#seentics-notification-styles')) {
-        const style = document.createElement('style');
-        style.id = 'seentics-notification-styles';
-        style.textContent = `
-          @keyframes seenticsSlideIn {
-            from { opacity: 0; transform: translateY(-20px) ${position.includes('center') ? 'translateX(-50%)' : ''}; }
-            to { opacity: 1; transform: translateY(0) ${position.includes('center') ? 'translateX(-50%)' : ''}; }
-          }
-          @keyframes seenticsSlideOut {
-            from { opacity: 1; transform: translateY(0) ${position.includes('center') ? 'translateX(-50%)' : ''}; }
-            to { opacity: 0; transform: translateY(-20px) ${position.includes('center') ? 'translateX(-50%)' : ''}; }
-          }
-        `;
-        document.head.appendChild(style);
-      }
+      // Icon mapping
+      const icons = {
+        success: '✓',
+        error: '✕',
+        warning: '⚠',
+        info: 'ℹ'
+      };
 
       // Icon
       if (settings.showIcon !== false) {
         const iconSpan = document.createElement('span');
-        iconSpan.textContent = icon;
-        iconSpan.style.cssText = 'font-weight:bold;font-size:16px;';
+        iconSpan.className = 'notification-icon';
+        iconSpan.textContent = icons[type] || icons.info;
         notification.appendChild(iconSpan);
       }
 
       // Message
       const message = document.createElement('span');
+      message.className = 'notification-message';
       message.textContent = settings.notificationMessage;
-      message.style.cssText = 'flex:1;line-height:1.4;';
       notification.appendChild(message);
 
       // Close button (optional)
       if (settings.showCloseButton !== false) {
         const closeBtn = document.createElement('button');
         closeBtn.innerHTML = '×';
-        closeBtn.style.cssText = `
-          border:none;
-          background:none;
-          color:inherit;
-          font-size:18px;
-          cursor:pointer;
-          padding:0;
-          margin-left:8px;
-          opacity:0.7;
-          transition:opacity 0.2s;
-        `;
-        closeBtn.onmouseover = () => closeBtn.style.opacity = '1';
-        closeBtn.onmouseout = () => closeBtn.style.opacity = '0.7';
+        closeBtn.className = 'notification-close';
         closeBtn.onclick = () => this._removeNotification(notification);
         notification.appendChild(closeBtn);
       }
@@ -748,7 +692,7 @@
 
       // Click to dismiss (optional)
       if (settings.clickToDismiss !== false) {
-        notification.style.cursor = 'pointer';
+        notification.classList.add('clickable');
         notification.onclick = () => this._removeNotification(notification);
       }
     },
@@ -756,7 +700,7 @@
     _removeNotification(notification) {
       if (!notification.parentNode) return;
 
-      notification.style.animation = 'seenticsSlideOut 0.3s ease-in forwards';
+      notification.classList.add('slide-out');
       setTimeout(() => {
         if (notification.parentNode) {
           notification.parentNode.removeChild(notification);
@@ -789,19 +733,27 @@
     },
 
     _trackEvent(workflow, node, eventType, options = {}) {
+      // Optimized payload - only essential data
       const payload = {
-        website_id: this.siteId,
-        visitor_id: this.visitorId,
-        session_id: this.sessionId,
-        event_type: 'workflow_analytics',
-        workflow_id: workflow.id,
-        workflow_name: workflow.name || 'Unnamed Workflow',
-        node_id: node?.id || null,
-        node_title: node?.data?.title || null,
-        analytics_event_type: eventType,
-        timestamp: new Date().toISOString(),
-        ...options
+        w: this.siteId,           // website_id (shortened)
+        v: this.visitorId,        // visitor_id (shortened)
+        s: this.sessionId,        // session_id (shortened)
+        t: 'wf',                  // event_type (shortened)
+        wf: workflow.id,          // workflow_id (shortened)
+        n: node?.id || null,      // node_id (shortened)
+        e: eventType,             // analytics_event_type (shortened)
+        ts: Date.now()            // timestamp as number (more efficient)
       };
+
+      // Only include optional data if it exists and is meaningful
+      if (node?.data?.title && eventType !== 'workflow_trigger') {
+        payload.nt = node.data.title; // node_title (shortened)
+      }
+
+      // Only include specific options that are actually needed
+      if (options.result) payload.r = options.result;
+      if (options.status && options.status !== 'success') payload.st = options.status;
+      if (options.error) payload.err = options.error.substring(0, 100); // Truncate errors
 
       // Send workflow analytics only to workflow service
       this.analytics.addEvent(payload);

@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	// Simple batch collection - much smaller batches, more frequent flushes
-	BatchSize     = 50
-	FlushInterval = 2 * time.Second
+	// Optimized batch collection for better throughput
+	BatchSize     = 200               // Increased from 50 for better throughput
+	FlushInterval = 5 * time.Second   // Increased from 2s to balance latency vs efficiency
 )
 
 type EventService struct {

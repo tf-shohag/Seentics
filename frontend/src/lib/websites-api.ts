@@ -89,8 +89,20 @@ export async function addWebsite(website: { name: string; url: string }, userId:
         bounceRate: 0
       }
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error adding website: ', error);
+    
+    // Check for limit reached error
+    if (error.response?.status === 403 && error.response?.data?.error === 'LIMIT_REACHED') {
+      const errorData = error.response.data.data;
+      throw new Error(`Website limit reached! You've used ${errorData.currentUsage}/${errorData.limit} websites on your ${errorData.currentPlan} plan. Please upgrade to add more websites.`);
+    }
+    
+    // Check for other limit-related errors
+    if (error.response?.data?.message?.includes('limit')) {
+      throw new Error(error.response.data.message);
+    }
+    
     throw error;
   }
 }

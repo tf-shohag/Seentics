@@ -16,14 +16,7 @@ const nodeSchema = new mongoose.Schema({
     isServerAction: { type: Boolean, default: false }
   },
   width: Number,
-  height: Number,
-  // Allow UI-specific properties that might leak through
-  selected: Boolean,
-  dragging: Boolean,
-  positionAbsolute: mongoose.Schema.Types.Mixed,
-  measured: mongoose.Schema.Types.Mixed,
-  resizing: Boolean,
-  style: mongoose.Schema.Types.Mixed
+  height: Number
 }, { _id: false });
 
 const edgeSchema = new mongoose.Schema({
@@ -33,12 +26,7 @@ const edgeSchema = new mongoose.Schema({
   sourceHandle: String,
   targetHandle: String,
   animated: { type: Boolean, default: false },
-  style: mongoose.Schema.Types.Mixed,
-  label: String,
-  // Allow UI-specific properties that might leak through
-  selected: Boolean,
-  markerEnd: mongoose.Schema.Types.Mixed,
-  markerStart: mongoose.Schema.Types.Mixed
+  label: String
 }, { _id: false });
 
 const workflowSchema = new mongoose.Schema({
@@ -50,7 +38,7 @@ const workflowSchema = new mongoose.Schema({
   nodes: [nodeSchema],
   edges: [edgeSchema],
   
-  // Workflow-level analytics counters
+  // Consolidated analytics counters (removed redundancy)
   analytics: {
     totalTriggers: { type: Number, default: 0 },
     totalCompletions: { type: Number, default: 0 },
@@ -73,12 +61,7 @@ const workflowSchema = new mongoose.Schema({
       },
       default: new Map()
     }
-  },
-  
-  // Legacy fields for backward compatibility
-  totalTriggers: { type: Number, default: 0 },
-  totalCompletions: { type: Number, default: 0 },
-  completionRate: { type: String, default: '0.0%' }
+  }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },

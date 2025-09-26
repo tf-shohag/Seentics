@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	MaxBatchSize = 1000
-	BatchTimeout = 30 * time.Second
+	MaxBatchSize = 2000               // Increased from 1000 for better throughput
+	BatchTimeout = 30 * time.Second   // Keep timeout reasonable for reliability
 )
 
 type EventRepository struct {

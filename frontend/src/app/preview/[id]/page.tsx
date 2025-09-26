@@ -128,7 +128,7 @@ export default function PreviewPage() {
       {workflow && (
         <Script
           key={previewKey}
-          src="/tracker.js"
+          src="/trackers/tracker.js"
           data-site-id={"preview"}
         />
       )}

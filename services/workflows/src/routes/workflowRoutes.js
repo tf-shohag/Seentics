@@ -3,12 +3,12 @@ import * as executionController from '../controllers/executionController.js';
 import * as workflowAnalyticsController from '../controllers/workflowAnalyticsController.js';
 import * as workflowController from '../controllers/workflowController.js';
 import * as workflowStatsController from '../controllers/workflowStatsController.js';
-import { checkSubscriptionLimit } from '../middleware/subscriptionMiddleware.js';
+import { checkSubscriptionLimit, incrementUsageCounter } from '../middleware/subscriptionMiddleware.js';
 
 const router = express.Router();
 
 // Workflow CRUD operations
-router.post('/', checkSubscriptionLimit('workflows'), workflowController.create);
+router.post('/', checkSubscriptionLimit('workflows'), incrementUsageCounter('workflows'), workflowController.create);
 router.get('/', workflowController.getAll);
 router.get('/:id', workflowController.getById);
 router.put('/:id', workflowController.update);

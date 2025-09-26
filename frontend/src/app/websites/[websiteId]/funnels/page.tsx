@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useToast } from '@/hooks/use-toast';
 import { useFunnels } from '@/lib/analytics-api';
 import { useAuth } from '@/stores/useAuthStore';
+import { useSubscription } from '@/hooks/useSubscription';
 import { PlusCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -20,12 +21,13 @@ export default function FunnelsPage({ params }: FunnelsPageProps) {
   const { websiteId } = params;
   const { user } = useAuth();
   const { toast } = useToast();
+  const { subscription, canCreateFunnel } = useSubscription();
 
   const { data: funnels = [], isLoading: isLoadingFunnels } = useFunnels(websiteId);
 
-  // In open source version, all features are unlimited
-  const canAddFunnel = true;
-  const planName = 'Open Source';
+  // Use actual subscription limits
+  const canAddFunnel = canCreateFunnel;
+  const planName = subscription?.plan || 'Free';
 
   // Real metrics from actual funnel data
   const totalFunnels = funnels?.length || 0;
