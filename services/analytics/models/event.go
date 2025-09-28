@@ -20,7 +20,10 @@ type Event struct {
 	UserAgent   *string    `json:"user_agent,omitempty" db:"user_agent"`
 	IPAddress   *string    `json:"ip_address,omitempty" db:"ip_address"`
 	Country     *string    `json:"country,omitempty" db:"country"`
+	CountryCode *string    `json:"country_code,omitempty" db:"country_code"`
 	City        *string    `json:"city,omitempty" db:"city"`
+	Continent   *string    `json:"continent,omitempty" db:"continent"`
+	Region      *string    `json:"region,omitempty" db:"region"`
 	Browser     *string    `json:"browser,omitempty" db:"browser"`
 	Device      *string    `json:"device,omitempty" db:"device"`
 	OS          *string    `json:"os,omitempty" db:"os"`

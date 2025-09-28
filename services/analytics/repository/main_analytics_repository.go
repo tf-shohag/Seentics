@@ -3,6 +3,7 @@ package repository
 import (
 	"analytics-app/models"
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -17,6 +18,7 @@ type MainAnalyticsRepository struct {
 	topBrowsers    *TopBrowsersAnalytics
 	topDevices     *TopDevicesAnalytics
 	topOS          *TopOSAnalytics
+	geolocation    *TopGeolocationAnalytics
 	trafficSummary *TrafficSummaryAnalytics
 	timeSeries     *TimeSeriesAnalytics
 	customEvents   *CustomEventsAnalytics
@@ -33,6 +35,7 @@ func NewMainAnalyticsRepository(db *pgxpool.Pool) *MainAnalyticsRepository {
 		topBrowsers:    NewTopBrowsersAnalytics(db),
 		topDevices:     NewTopDevicesAnalytics(db),
 		topOS:          NewTopOSAnalytics(db),
+		geolocation:    NewTopGeolocationAnalytics(db),
 		trafficSummary: NewTrafficSummaryAnalytics(db),
 		timeSeries:     NewTimeSeriesAnalytics(db),
 		customEvents:   NewCustomEventsAnalytics(db),
@@ -130,4 +133,17 @@ func (r *MainAnalyticsRepository) GetLiveVisitors(ctx context.Context, websiteID
 	}
 
 	return liveVisitors, nil
+}
+
+// Geolocation Analytics Methods
+func (r *MainAnalyticsRepository) GetTopContinents(ctx context.Context, websiteID string, startDate, endDate time.Time, limit int) ([]models.TopItem, error) {
+	return r.geolocation.GetTopContinents(ctx, websiteID, startDate, endDate, limit)
+}
+
+func (r *MainAnalyticsRepository) GetTopRegions(ctx context.Context, websiteID string, startDate, endDate time.Time, limit int) ([]models.TopItem, error) {
+	return r.geolocation.GetTopRegions(ctx, websiteID, startDate, endDate, limit)
+}
+
+func (r *MainAnalyticsRepository) GetGeolocationBreakdown(ctx context.Context, websiteID string, startDate, endDate time.Time) (*models.GeolocationBreakdown, error) {
+	return r.geolocation.GetGeolocationBreakdown(ctx, websiteID, startDate, endDate)
 }

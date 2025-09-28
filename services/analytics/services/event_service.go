@@ -340,16 +340,33 @@ func (s *EventService) enrichEventData(ctx context.Context, event *models.Event)
 		}
 	}
 
-	// Get geolocation from IP
+	// Get comprehensive geolocation from IP
 	if (event.Country == nil || *event.Country == "") &&
 		(event.IPAddress != nil && *event.IPAddress != "") {
 
 		location := utils.GetLocationFromIP(*event.IPAddress)
+		
+		// Set country information
 		if event.Country == nil || *event.Country == "" {
 			event.Country = &location.Country
 		}
+		if event.CountryCode == nil || *event.CountryCode == "" {
+			event.CountryCode = &location.CountryCode
+		}
+		
+		// Set city information
 		if event.City == nil || *event.City == "" {
 			event.City = &location.City
+		}
+		
+		// Set continent information
+		if event.Continent == nil || *event.Continent == "" {
+			event.Continent = &location.Continent
+		}
+		
+		// Set region information
+		if event.Region == nil || *event.Region == "" {
+			event.Region = &location.Region
 		}
 	}
 }

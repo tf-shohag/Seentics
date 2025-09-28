@@ -87,6 +87,19 @@ type OSStat struct {
 	BounceRate *float64 `json:"bounce_rate,omitempty" db:"bounce_rate"`
 }
 
+type TopItem struct {
+	Name       string  `json:"name"`
+	Count      int     `json:"count"`
+	Percentage float64 `json:"percentage"`
+}
+
+type GeolocationBreakdown struct {
+	Countries  []TopItem `json:"countries"`
+	Continents []TopItem `json:"continents"`
+	Regions    []TopItem `json:"regions"`
+	Cities     []TopItem `json:"cities"`
+}
+
 type DailyStat struct {
 	Date   time.Time `json:"date" db:"date"`
 	Views  int       `json:"views" db:"views"`

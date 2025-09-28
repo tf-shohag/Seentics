@@ -92,6 +92,16 @@ func (h *EventHandler) TrackBatchEvents(c *gin.Context) {
 		return
 	}
 
+	// Capture client IP for geolocation
+	clientIP := c.ClientIP()
+	
+	// Set IP address for all events in the batch
+	for i := range req.Events {
+		if req.Events[i].IPAddress == nil || *req.Events[i].IPAddress == "" {
+			req.Events[i].IPAddress = &clientIP
+		}
+	}
+
 	// Optimize events by removing redundant data and parsing user agents server-side
 	h.optimizeEventBatch(&req)
 
@@ -141,22 +151,28 @@ func (h *EventHandler) optimizeEventBatch(req *models.BatchEventRequest) {
 	for i := range req.Events {
 		event := &req.Events[i]
 		
-		// Parse user agent server-side if provided
+		// Fallback: Parse user agent server-side only if device info is still missing
 		if event.UserAgent != nil && *event.UserAgent != "" {
 			if sessionUserAgent != *event.UserAgent {
 				sessionUserAgent = *event.UserAgent
 				sessionBrowser, sessionDevice, sessionOS = h.parseUserAgent(sessionUserAgent)
 			}
 			
-			// Set parsed values
-			if sessionBrowser != "" {
-				event.Browser = &sessionBrowser
+			// Only set parsed values if still missing
+			if event.Browser == nil || *event.Browser == "" {
+				if sessionBrowser != "" {
+					event.Browser = &sessionBrowser
+				}
 			}
-			if sessionDevice != "" {
-				event.Device = &sessionDevice
+			if event.Device == nil || *event.Device == "" {
+				if sessionDevice != "" {
+					event.Device = &sessionDevice
+				}
 			}
-			if sessionOS != "" {
-				event.OS = &sessionOS
+			if event.OS == nil || *event.OS == "" {
+				if sessionOS != "" {
+					event.OS = &sessionOS
+				}
 			}
 			
 			// Clear user agent to save bandwidth

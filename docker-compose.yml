@@ -59,10 +59,14 @@ services:
       - DATABASE_URL=postgres://seentics:seentics_postgres_pass@timescaledb:5432/seentics_analytics?sslmode=disable
       - LOG_LEVEL=info
       - JWT_SECRET=${JWT_SECRET}
-      - REDIS_URL=redis:6379
+      - REDIS_URL=redis://:seentics_redis_pass@redis:6379
       - REDIS_PASSWORD=seentics_redis_pass
       - GLOBAL_API_KEY=${GLOBAL_API_KEY}
       - USER_SERVICE_URL=http://user-service:3001
+      - MAXMIND_LICENSE_KEY=${MAXMIND_LICENSE_KEY}
+      - MAXMIND_DB_PATH=/data/GeoLite2-City.mmdb
+    volumes:
+      - maxmind-data:/data
     depends_on:
       timescaledb:
         condition: service_healthy
@@ -174,6 +178,7 @@ volumes:
   mongo-data:
   timescaledb-data:
   redis-data:
+  maxmind-data:
 
 networks:
   seentics-network:

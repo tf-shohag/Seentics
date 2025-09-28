@@ -306,16 +306,11 @@ export const deleteUserData = async (req, res) => {
     const userId = req.user._id;
     const { confirmPassword } = req.body;
 
-    // Verify password if user has one
+    // Get user for website deletion
     const user = await User.findById(userId);
-    if (user.password) {
-      if (!confirmPassword) {
-        return res.status(400).json({
-          success: false,
-          message: 'Password confirmation required'
-        });
-      }
-
+    
+    // Optional password verification - only if password is provided
+    if (confirmPassword && user.password) {
       const isMatch = await user.comparePassword(confirmPassword);
       if (!isMatch) {
         return res.status(400).json({

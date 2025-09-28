@@ -26,7 +26,7 @@ export default function ProblemStatement() {
       subtitle: "Automate Like Magic",
       description: "Set up smart automations that work 24/7. Show the right message to the right person at the perfect moment - without lifting a finger.",
       benefits: [
-        "Drag-and-drop automation builder (no coding needed)", 
+        "Drag-and-drop automation builder (no coding needed)",
         "Welcome new visitors automatically",
         "Send emails based on visitor behavior",
         "Show popups when people are about to leave",
@@ -38,14 +38,14 @@ export default function ProblemStatement() {
     },
     {
       icon: Target,
-      title: "Funnels", 
+      title: "Funnels",
       subtitle: "Turn Visitors Into Customers",
       description: "Create step-by-step journeys that guide visitors to buy, subscribe, or take action. Test different approaches to see what works best.",
       benefits: [
         "Build conversion paths that actually work",
         "Test different versions to find winners",
         "Guide visitors through your sales process",
-        "Track every step from visit to purchase", 
+        "Track every step from visit to purchase",
         "Get suggestions on how to improve",
         "Connect with your email and payment tools",
         "Watch your conversion rates grow"
@@ -58,12 +58,12 @@ export default function ProblemStatement() {
     <section className="py-20 bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800">
       <div className="container mx-auto px-4">
         <div className="max-w-7xl mx-auto">
-          
+
           {/* Header */}
           <div className="text-center mb-12">
             <h2 className="text-4xl md:text-5xl font-bold mb-6 text-slate-900 dark:text-white">
               Everything You Need
-              <span className="block text-slate-600 dark:text-slate-400 mt-2">
+              <span className="block text-blue-500 mt-2">
                 In One Simple Platform
               </span>
             </h2>
@@ -77,27 +77,27 @@ export default function ProblemStatement() {
             {features.map((feature, index) => (
               <Card key={index} className="bg-white dark:bg-slate-800 shadow-lg hover:shadow-xl transition-all duration-300 border-0 h-full">
                 <CardContent className="p-6 flex flex-col h-full">
-                  
+
                   {/* Icon */}
                   <div className=" flex items-center justify-center w-16 h-16 bg-blue-100 dark:bg-blue-500 rounded-xl mb-6">
                     <feature.icon className="h-8 w-8 text-slate-900 dark:text-white" />
                   </div>
-                  
+
                   {/* Title */}
                   <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
                     {feature.title}
                   </h3>
-                  
+
                   {/* Subtitle */}
                   <p className="text-slate-600 dark:text-slate-400 font-semibold mb-4">
                     {feature.subtitle}
                   </p>
-                  
+
                   {/* Description */}
                   <p className="text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">
                     {feature.description}
                   </p>
-                  
+
                   {/* Benefits */}
                   <ul className="space-y-2 mb-6">
                     {feature.benefits.map((benefit, benefitIndex) => (
@@ -123,7 +123,7 @@ export default function ProblemStatement() {
                       ))}
                     </div>
                   </div>
-                  
+
                 </CardContent>
               </Card>
             ))}

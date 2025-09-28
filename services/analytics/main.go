@@ -53,14 +53,13 @@ func main() {
 	}
 
 	// Initialize Redis client
-	redisClient := redis.NewClient(&redis.Options{
-		Addr:         getEnvOrDefault("REDIS_URL", "redis:6379"),
-		Password:     getEnvOrDefault("REDIS_PASSWORD", ""),
-		DB:           0,
-		DialTimeout:  10 * time.Second,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-	})
+	redisURL := getEnvOrDefault("REDIS_URL", "redis://:seentics_redis_pass@redis:6379")
+	opt, err := redis.ParseURL(redisURL)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to parse Redis URL")
+	}
+	
+	redisClient := redis.NewClient(opt)
 
 	// Test Redis connection
 	ctx := context.Background()

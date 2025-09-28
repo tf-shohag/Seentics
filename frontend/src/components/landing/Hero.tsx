@@ -54,15 +54,15 @@ export default function Hero() {
             {isAuthenticated && user ? (
               <>
                 <Link href="/websites">
-                  <Button size="lg" className="px-10 py-6 text-lg font-semibold">
+                  <Button size="lg" className="px-10 py-6 text-lg font-semibold rounded-md">
                     Go to Dashboard
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
 
                 <a href="https://github.com/seentics/seentics" target="_blank" rel="noopener noreferrer">
-                  <Button variant="outline" size="lg" className="px-10 py-6 text-lg font-semibold border-2 border-slate-300 dark:border-slate-600 rounded-xl transition-all duration-300">
-                  <FaGithub size={30} />
+                  <Button variant="outline" size="lg" className="px-10 py-6 text-lg font-semibold border-2 border-slate-300 dark:border-slate-600 rounded-md transition-all duration-300">
+                    <FaGithub size={30} />
                     View Source
                   </Button>
                 </a>
@@ -70,15 +70,15 @@ export default function Hero() {
             ) : (
               <>
                 <Link href="/signup">
-                  <Button size="lg"  className="px-10 py-6 text-lg font-semibold">
+                  <Button size="lg" className="px-10 py-6 text-lg font-semibold rounded-md">
                     Start Free Today
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
 
                 <a href="https://github.com/seentics/seentics" target="_blank" rel="noopener noreferrer">
-                  <Button variant="secondary" size="lg" className="font-semibold text-lg">
-                  <FaGithub size={30} />
+                  <Button variant="secondary" size="lg" className="font-semibold text-lg rounded-md">
+                    <FaGithub size={30} />
                     GitHub
                   </Button>
                 </a>
@@ -95,7 +95,7 @@ export default function Hero() {
         </div>
       </div>
 
-      
+
 
       {/* Simple animations */}
       <style jsx>{`

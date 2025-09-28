@@ -121,7 +121,7 @@
       // --- Request Deduplication ---
       async function deduplicatedFetch(url, options, retryCount = 0) {
         if (isDestroyed) return;
-        
+
         const key = `${url}:${JSON.stringify(options)}`;
         if (pendingRequests.has(key)) {
           return pendingRequests.get(key);
@@ -201,7 +201,7 @@
 
       function getDeviceInfo() {
         if (deviceInfo) return deviceInfo;
-        
+
         const ua = nav.userAgent;
         deviceInfo = {
           browser: getBrowser(ua),
@@ -259,15 +259,14 @@
           lastReferrer = currentReferrer;
         }
 
-        // Include device info only once per session
-        if (!sessionData || sessionData.sessionId !== sessionId) {
-          const deviceData = getDeviceInfo();
-          event.browser = deviceData.browser;
-          event.device = deviceData.device;
-          event.os = deviceData.os;
-          
-          sessionData = { sessionId, deviceData };
-        }
+
+        const deviceData = getDeviceInfo();
+        event.browser = deviceData.browser;
+        event.device = deviceData.device;
+        event.os = deviceData.os;
+
+        sessionData = { sessionId, deviceData };
+
 
         queueEvent(event);
 
@@ -308,7 +307,7 @@
         if (pageviewSent || !siteId || isDestroyed) return;
 
         const timeOnPage = Math.round((performance.now() - pageStartTime) / 1000);
-        
+
         refreshSessionIfNeeded();
 
         const event = {
@@ -328,15 +327,14 @@
           lastReferrer = currentReferrer;
         }
 
-        // Include device info only once per session
-        if (!sessionData || sessionData.sessionId !== sessionId) {
-          const deviceData = getDeviceInfo();
-          event.browser = deviceData.browser;
-          event.device = deviceData.device;
-          event.os = deviceData.os;
-          
-          sessionData = { sessionId, deviceData };
-        }
+
+        const deviceData = getDeviceInfo();
+        event.browser = deviceData.browser;
+        event.device = deviceData.device;
+        event.os = deviceData.os;
+
+        sessionData = { sessionId, deviceData };
+
 
         // Only include UTM parameters if they've changed
         const currentUTMUrl = loc.search;
@@ -388,7 +386,7 @@
       // Cleanup function
       function cleanup() {
         isDestroyed = true;
-        
+
         // Clear timers
         if (activityTimeout) {
           clearTimeout(activityTimeout);
@@ -398,7 +396,7 @@
           clearTimeout(flushTimeout);
           flushTimeout = null;
         }
-        
+
         // Execute cleanup tasks
         cleanupTasks.forEach(task => {
           try {
@@ -408,12 +406,12 @@
           }
         });
         cleanupTasks.length = 0;
-        
+
         // Final flush
         if (eventQueue.length > 0) {
           flushEventQueue();
         }
-        
+
         // Clear pending requests
         pendingRequests.clear();
       }
