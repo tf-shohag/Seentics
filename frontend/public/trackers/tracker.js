@@ -1,21 +1,5 @@
 (function () {
   // --- Seentics Analytics Tracker v1.0.2 (Performance & Reliability Fixed) ---
-  // Fixed: Duplicate pageview tracking, error boundaries, memory leaks, performance issues
-
-  // --- Polyfills ---
-  if (!window.requestIdleCallback) {
-    window.requestIdleCallback = function (cb) {
-      const start = performance.now();
-      return setTimeout(() => {
-        cb({
-          didTimeout: false,
-          timeRemaining() {
-            return Math.max(0, 50 - (performance.now() - start));
-          }
-        });
-      }, 1);
-    };
-  }
 
   // --- Main Tracker ---
   if (document.currentScript) {
@@ -195,13 +179,11 @@
       // --- Custom Event Tracking ---
 
       // Cache for session-level data to avoid repetition
-      let sessionData = null;
       let lastReferrer = null;
       let deviceInfo = null;
 
       function getDeviceInfo() {
         if (deviceInfo) return deviceInfo;
-
         const ua = nav.userAgent;
         deviceInfo = {
           browser: getBrowser(ua),
@@ -265,9 +247,6 @@
         event.device = deviceData.device;
         event.os = deviceData.os;
 
-        sessionData = { sessionId, deviceData };
-
-
         queueEvent(event);
 
         // Emit for funnel tracker
@@ -280,28 +259,32 @@
 
       // --- Pageview Tracking ---
 
+      // Optimized UTM parameter extraction with better caching
+      let urlParamsCache = null;
+
       function extractUTMParameters() {
         const currentUrl = loc.search;
         if (currentUrl === lastUrlForUTM && cachedUTMParams) {
           return cachedUTMParams;
         }
 
-        const urlParams = new URLSearchParams(currentUrl);
+        // Reuse URLSearchParams object if URL hasn't changed
+        if (!urlParamsCache || currentUrl !== lastUrlForUTM) {
+          urlParamsCache = new URLSearchParams(currentUrl);
+        }
+
         cachedUTMParams = {
-          utm_source: urlParams.get('utm_source'),
-          utm_medium: urlParams.get('utm_medium'),
-          utm_campaign: urlParams.get('utm_campaign'),
-          utm_term: urlParams.get('utm_term'),
-          utm_content: urlParams.get('utm_content')
+          utm_source: urlParamsCache.get('utm_source'),
+          utm_medium: urlParamsCache.get('utm_medium'),
+          utm_campaign: urlParamsCache.get('utm_campaign'),
+          utm_term: urlParamsCache.get('utm_term'),
+          utm_content: urlParamsCache.get('utm_content')
         };
         lastUrlForUTM = currentUrl;
 
         return cachedUTMParams;
       }
 
-      // Cache UTM parameters to avoid repetition
-      let cachedUTMData = null;
-      let lastUTMUrl = '';
 
       function sendPageview() {
         if (pageviewSent || !siteId || isDestroyed) return;
@@ -333,30 +316,18 @@
         event.device = deviceData.device;
         event.os = deviceData.os;
 
-        sessionData = { sessionId, deviceData };
-
-
-        // Only include UTM parameters if they've changed
-        const currentUTMUrl = loc.search;
-        if (currentUTMUrl !== lastUTMUrl || !cachedUTMData) {
-          const utmParams = extractUTMParameters();
-          // Only include UTM params that have values
-          Object.keys(utmParams).forEach(key => {
-            if (utmParams[key]) {
-              event[key] = utmParams[key];
-            }
-          });
-          cachedUTMData = utmParams;
-          lastUTMUrl = currentUTMUrl;
-        }
+        // Include UTM parameters if available
+        const utmParams = extractUTMParameters();
+        // Only include UTM params that have values
+        Object.keys(utmParams).forEach(key => {
+          if (utmParams[key]) {
+            event[key] = utmParams[key];
+          }
+        });
 
         pageviewSent = true;
         queueEvent(event);
       }
-
-      // --- Automatic event handlers removed - users can manually call seentics.track() ---
-
-      // Removed automatic event tracking - users can manually call seentics.track()
 
       // --- Event Listeners ---
 
@@ -436,10 +407,26 @@
         win.addEventListener('beforeunload', beforeUnloadHandler);
         cleanupTasks.push(() => win.removeEventListener('beforeunload', beforeUnloadHandler));
 
-        // Activity listeners
-        ['click', 'keydown', 'scroll', 'mousemove', 'touchstart'].forEach(evt => {
+        // Activity listeners with throttling for high-frequency events
+        let throttleTimeout = null;
+        const throttledActivity = () => {
+          if (throttleTimeout) return;
+          throttleTimeout = setTimeout(() => {
+            onActivity();
+            throttleTimeout = null;
+          }, 100); // Throttle to max 10 calls per second
+        };
+
+        // Low frequency events - no throttling needed
+        ['click', 'keydown'].forEach(evt => {
           doc.addEventListener(evt, onActivity, { passive: true });
           cleanupTasks.push(() => doc.removeEventListener(evt, onActivity));
+        });
+
+        // High frequency events - throttled
+        ['scroll', 'mousemove', 'touchstart'].forEach(evt => {
+          doc.addEventListener(evt, throttledActivity, { passive: true });
+          cleanupTasks.push(() => doc.removeEventListener(evt, throttledActivity));
         });
 
         // SPA navigation detection
@@ -495,6 +482,7 @@
       async function loadAdditionalTrackers() {
         try {
           await Promise.all([
+            loadResource('/trackers/shared-constants.js'), // Load shared constants first
             loadResource('/trackers/styles/tracker-styles.css', 'link'),
             loadResource('/trackers/workflow-tracker.js'),
             loadResource('/trackers/funnel-tracker.js')
@@ -530,6 +518,7 @@
           track: trackCustomEvent,
           sendPageview,
           cleanup,
+          getDeviceInfo, // Expose device info for other trackers
           ...(DEBUG && {
             getVisitorId: () => visitorId,
             getSessionId: () => sessionId,

@@ -4,8 +4,9 @@
   // --- Seentics Workflow Tracker v1.0.2 (Fixed Action Frequency & Error Handling) ---
   // Fixed: Action frequency logic, error boundaries, memory leaks, performance issues
 
-  // --- MVP Constants ---
-  const TRIGGERS = {
+  // --- Use Shared Constants ---
+  const SHARED = window.SEENTICS_SHARED || {};
+  const TRIGGERS = SHARED.WORKFLOW_TRIGGERS || {
     PAGE_VIEW: 'Page View',
     ELEMENT_CLICK: 'Element Click',
     FUNNEL: 'Funnel',
@@ -13,7 +14,7 @@
     EXIT_INTENT: 'Exit Intent'
   };
 
-  const ACTIONS = {
+  const ACTIONS = SHARED.WORKFLOW_ACTIONS || {
     SHOW_MODAL: 'Show Modal',
     SHOW_BANNER: 'Show Banner',
     SHOW_NOTIFICATION: 'Show Notification',
@@ -22,21 +23,21 @@
     REDIRECT_URL: 'Redirect URL'
   };
 
-  const CONDITIONS = {
+  const CONDITIONS = SHARED.WORKFLOW_CONDITIONS || {
     URL_PATH: 'URL Path',
     TRAFFIC_SOURCE: 'Traffic Source',
     NEW_VS_RETURNING: 'New vs Returning',
     DEVICE: 'Device Type'
   };
 
-  const FREQUENCY_TYPES = {
+  const FREQUENCY_TYPES = SHARED.FREQUENCY_TYPES || {
     EVERY_TRIGGER: 'every_trigger',
     ONCE_PER_SESSION: 'once_per_session',
     ONCE_EVER: 'once_ever'
   };
 
-  // --- Safe Storage Utilities ---
-  const storage = {
+  // --- Use Shared Utilities ---
+  const storage = SHARED.SharedUtils?.safeLocalStorage || {
     get: (key) => {
       try {
         return localStorage.getItem(key);
@@ -65,7 +66,7 @@
     }
   };
 
-  const sessionStorage = {
+  const sessionStorage = SHARED.SharedUtils?.safeSessionStorage || {
     get: (key) => {
       try {
         return window.sessionStorage.getItem(key);
@@ -85,14 +86,26 @@
     }
   };
 
-  const generateId = () => `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  // Use shared utility functions
+  const generateId = SHARED.SharedUtils?.generateId || (() => `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`);
+  
+  // Use shared utilities from main tracker
   const getDeviceType = () => {
+    // Delegate to main tracker's device detection if available
+    if (window.seentics?.getDeviceInfo) {
+      const deviceInfo = window.seentics.getDeviceInfo();
+      return deviceInfo.device || 'Desktop';
+    }
+    
+    // Fallback device detection
     const userAgent = navigator.userAgent;
     if (/iPad|Android(?=.*Mobile)|PlayBook|Silk/i.test(userAgent)) return 'Tablet';
     if (/Mobi|Android/i.test(userAgent)) return 'Mobile';
     return 'Desktop';
   };
-  const throttle = (fn, delay) => {
+  
+  // Use shared throttle utility
+  const throttle = SHARED.SharedUtils?.throttle || ((fn, delay) => {
     let last = 0;
     return (...args) => {
       const now = Date.now();
@@ -101,8 +114,7 @@
         fn(...args);
       }
     };
-  };
-
+  });
 
   // --- Analytics Manager ---
   class AnalyticsManager {
@@ -199,8 +211,8 @@
     async _fetchWorkflows() {
       try {
         const response = await fetch(`${this._getApiHost()}/api/v1/workflows/site/${this.siteId}/active`, {
-      credentials: 'omit' // Explicitly omit credentials for public tracking
-    });
+          credentials: 'omit' // Explicitly omit credentials for public tracking
+        });
         const data = await response.json();
         this.activeWorkflows = data?.workflows?.filter(w => w.status === 'Active') || [];
         this._setupTriggers();
@@ -312,11 +324,11 @@
 
     async _executeWorkflow(workflow, currentNode) {
       const runId = generateId();
-      
+
       // Check if any actions in this workflow will actually execute
       // Don't track trigger if all actions are frequency-limited
       const willExecuteAnyAction = this._willWorkflowExecuteActions(workflow);
-      
+
       if (!willExecuteAnyAction) {
         // Don't track trigger or execute workflow if no actions will run
         return;
@@ -331,7 +343,7 @@
 
       let node = currentNode;
       let workflowExecuted = false;
-      
+
       while (node) {
         if (node.data?.type === 'Condition') {
           const conditionResult = this._evaluateCondition(node);
@@ -355,7 +367,7 @@
 
           if (frequencyAllowed) {
             workflowExecuted = true;
-            
+
             this._trackEvent(workflow, node, 'action_started', {
               runId,
               actionType: node.data?.title,
@@ -404,7 +416,7 @@
     _willWorkflowExecuteActions(workflow) {
       try {
         const actionNodes = workflow.nodes?.filter(n => n.data?.type === 'Action') || [];
-        
+
         // If no actions, workflow won't execute anything meaningful
         if (actionNodes.length === 0) {
           return false;
@@ -643,7 +655,7 @@
       const notification = document.createElement('div');
       const position = settings.notificationPosition || 'top-right';
       const type = settings.notificationType || 'info';
-      
+
       notification.className = `seentics-notification ${position} ${type}`;
 
       // Icon mapping

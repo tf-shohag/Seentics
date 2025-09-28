@@ -12,30 +12,54 @@
     doc.querySelector('script[data-site-id]')?.getAttribute('data-site-id') ||
     window.seentics?.siteId ||
     window.SEENTICS_SITE_ID;
-
   if (!siteId) {
     if (DEBUG) console.warn('Seentics Funnel: No site ID provided');
     return;
   }
 
-  // Configuration
-  const apiHost = window.SEENTICS_CONFIG?.apiHost ||
-    (window.location.hostname === 'localhost' ? 'http://localhost:8080' : 'https://api.seentics.com');
+  // Use shared constants and utilities
+  const SHARED = window.SEENTICS_SHARED || {};
+  const STORAGE_KEYS = SHARED.STORAGE_KEYS || {
+    VISITOR_ID: 'seentics_visitor_id',
+    SESSION_ID: 'seentics_session_id'
+  };
+  const TIME_CONSTANTS = SHARED.TIME_CONSTANTS || {
+    VISITOR_EXPIRY_MS: 30 * 24 * 60 * 60 * 1000, // 30 days
+    SESSION_EXPIRY_MS: 30 * 60 * 1000, // 30 minutes
+    BATCH_DELAY: 1000
+  };
+
+  // Configuration using shared utilities
+  const apiHost = SHARED.SharedUtils?.getApiHost() ||
+    (window.SEENTICS_CONFIG?.apiHost ||
+      (window.location.hostname === 'localhost' ? 'http://localhost:8080' : 'https://api.seentics.com'));
   const FUNNEL_API_ENDPOINT = `${apiHost}/api/v1/funnels/track`;
 
   // Feature flags
   const trackFunnels = (scriptTag?.getAttribute('data-track-funnels') || '').toLowerCase() !== 'false';
 
-  // Constants
-  const VISITOR_ID_KEY = 'seentics_visitor_id';
-  const SESSION_ID_KEY = 'seentics_session_id';
+  // Funnel-specific constants
   const FUNNEL_STATE_KEY = 'seentics_funnel_state';
-  const BATCH_DELAY = 1000;
-  const VISITOR_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
-  const SESSION_TTL = 30 * 60 * 1000; // 30 minutes
 
-  // Utilities
-  function getOrCreateId(key, expiryMs) {
+  // Use shared utilities
+  const getOrCreateId = (key, expiryMs) => {
+    // Use shared storage utilities if available
+    const storage = SHARED.SharedUtils?.safeLocalStorage;
+    if (storage) {
+      try {
+        let id = storage.get(key);
+        if (!id) {
+          id = SHARED.SharedUtils.generateId();
+          storage.set(key, id);
+        }
+        return id;
+      } catch (e) {
+        console.warn('Seentics Funnel: Storage error:', e);
+        return SHARED.SharedUtils.generateId();
+      }
+    }
+
+    // Fallback implementation
     try {
       let id = localStorage.getItem(key);
       if (!id) {
@@ -47,24 +71,26 @@
       console.warn('Seentics Funnel: Storage error:', e);
       return Date.now().toString(36) + Math.random().toString(36).substring(2);
     }
-  }
+  };
 
-  function debounce(func, delay) {
+  // Use shared throttle/debounce utilities
+  const debounce = SHARED.SharedUtils?.throttle || ((func, delay) => {
     let timeoutId;
     return (...args) => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => func.apply(null, args), delay);
     };
-  }
+  });
 
   // State
-  let visitorId = getOrCreateId(VISITOR_ID_KEY, VISITOR_TTL);
-  let sessionId = getOrCreateId(SESSION_ID_KEY, SESSION_TTL);
+  let visitorId = getOrCreateId(STORAGE_KEYS.VISITOR_ID, TIME_CONSTANTS.VISITOR_EXPIRY_MS);
+  let sessionId = getOrCreateId(STORAGE_KEYS.SESSION_ID, TIME_CONSTANTS.SESSION_EXPIRY_MS);
   let activeFunnels = new Map();
   let funnelEventQueue = [];
   let funnelEventTimer = null;
   let funnelsValidated = false;
   let currentUrl = window.location.pathname;
+  let throttledClickHandler = null; // Store reference for cleanup
 
 
   // --- Funnel Tracking Functions ---
@@ -88,9 +114,13 @@
       // Load from cache first
       const cacheKey = `${FUNNEL_STATE_KEY}_${siteId}`;
       const cacheTimestampKey = `${cacheKey}_timestamp`;
-      const savedFunnels = localStorage.getItem(cacheKey);
-      const cacheTimestamp = localStorage.getItem(cacheTimestampKey);
-      
+      const storage = SHARED.SharedUtils?.safeLocalStorage || {
+        get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+        set: (k, v) => { try { localStorage.setItem(k, v); return true; } catch { return false; } }
+      };
+      const savedFunnels = storage.get(cacheKey);
+      const cacheTimestamp = storage.get(cacheTimestampKey);
+
       // Check if cache is still valid (1 hour)
       const cacheAge = Date.now() - (parseInt(cacheTimestamp) || 0);
       const cacheValid = cacheAge < 3600000; // 1 hour
@@ -139,7 +169,8 @@
         activeFunnels.clear();
         initializeFunnels(funnels);
 
-        localStorage.setItem(cacheKey, JSON.stringify(funnels));
+        storage.set(cacheKey, JSON.stringify(funnels));
+        storage.set(cacheTimestampKey, Date.now().toString());
         funnelsValidated = true;
 
         // Trigger initial page check
@@ -196,14 +227,6 @@
     if (DEBUG) console.log('🔍 Seentics: Total active funnels loaded:', activeFunnels.size);
   }
 
-  // Debounce utility
-  function debounce(func, delay) {
-    let timeoutId;
-    return (...args) => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => func.apply(null, args), delay);
-    };
-  }
 
   // Debounced funnel state update to prevent race conditions
   const debouncedSaveFunnelState = debounce(() => {
@@ -218,7 +241,10 @@
           converted: state.converted
         };
       });
-      localStorage.setItem(FUNNEL_STATE_KEY, JSON.stringify(stateToSave));
+      const storage = SHARED.SharedUtils?.safeLocalStorage || {
+        set: (k, v) => { try { localStorage.setItem(k, v); return true; } catch { return false; } }
+      };
+      storage.set(FUNNEL_STATE_KEY, JSON.stringify(stateToSave));
     } catch (e) {
       console.warn('Failed to save funnel state:', e);
     }
@@ -310,7 +336,9 @@
   }
 
   function monitorClickEvents() {
-    doc.addEventListener('click', (e) => {
+    // Use shared throttle utility for click events
+    const throttle = SHARED.SharedUtils?.throttle || debounce;
+    throttledClickHandler = throttle((e) => {
       const element = e.target;
 
       activeFunnels.forEach((funnelState, funnelId) => {
@@ -323,7 +351,9 @@
           }
         });
       });
-    }, { passive: true });
+    }, 100); // Throttle to max 10 clicks per second
+
+    doc.addEventListener('click', throttledClickHandler, { passive: true });
   }
 
   function monitorCustomEvents() {
@@ -405,7 +435,7 @@
     funnelEventQueue.push(funnelEvent);
 
     clearTimeout(funnelEventTimer);
-    funnelEventTimer = setTimeout(sendFunnelEvents, BATCH_DELAY);
+    funnelEventTimer = setTimeout(sendFunnelEvents, TIME_CONSTANTS.BATCH_DELAY);
   }
 
   function createFunnelEvent(funnelId, funnelState, properties) {
@@ -470,7 +500,10 @@
   function saveFunnelState() {
     try {
       const funnelStates = Array.from(activeFunnels.values());
-      localStorage.setItem(`${FUNNEL_STATE_KEY}_${siteId}`, JSON.stringify(funnelStates));
+      const storage = SHARED.SharedUtils?.safeLocalStorage || {
+        set: (k, v) => { try { localStorage.setItem(k, v); return true; } catch { return false; } }
+      };
+      storage.set(`${FUNNEL_STATE_KEY}_${siteId}`, JSON.stringify(funnelStates));
     } catch (error) {
       console.warn('🔍 Seentics: Error saving funnel state:', error);
     }
@@ -633,6 +666,12 @@
         clearTimeout(funnelEventTimer);
         funnelEventTimer = null;
       }
+
+      // Clear throttled handlers
+      if (throttledClickHandler && throttledClickHandler.cancel) {
+        throttledClickHandler.cancel();
+      }
+      throttledClickHandler = null;
 
       // Send any remaining events
       if (funnelEventQueue.length > 0) {
