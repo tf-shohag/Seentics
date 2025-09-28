@@ -61,8 +61,9 @@ func (tb *TopBrowsersAnalytics) GetTopBrowsers(ctx context.Context, websiteID st
 			continue
 		}
 
-		// Set the Unique field from the scanned value
+		// Set both Unique (deprecated) and Visitors fields from the scanned value
 		browser.Unique = uniqueVisitors
+		browser.Visitors = uniqueVisitors
 
 		// Cap bounce rate at 100%
 		if bounceRate != nil && *bounceRate > 100.0 {

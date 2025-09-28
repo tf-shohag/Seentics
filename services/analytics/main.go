@@ -249,6 +249,7 @@ func setupRouter(
 			analytics.GET("/hourly-stats/:website_id", analyticsHandler.GetHourlyStats)
 			analytics.GET("/custom-events/:website_id", analyticsHandler.GetCustomEvents)
 			analytics.GET("/live-visitors/:website_id", analyticsHandler.GetLiveVisitors)
+			analytics.GET("/geolocation-breakdown/:website_id", analyticsHandler.GetGeolocationBreakdown)
 		}
 
 		// Public funnel routes (no auth required) - must be before parameterized routes

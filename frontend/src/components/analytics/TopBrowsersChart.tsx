@@ -162,16 +162,15 @@ const getBrowserName = (browser: string) => {
   if (lowerBrowser.includes('edge')) return 'Edge';
   return browser;
 };
-
 export const TopBrowsersChart: React.FC<TopBrowsersChartProps> = ({ data, isLoading, showHeader = false }) => {
   if (isLoading) {
     return <Skeleton className="h-64 w-full" />;
   }
 
   const chartData = data?.top_browsers || [];
-  const filteredData = chartData.filter((item: any) => (item.views || 0) > 0);
-  const sortedData = [...filteredData].sort((a: any, b: any) => b.views - a.views).slice(0, 7);
-  const totalViews = sortedData.reduce((sum: number, item: any) => sum + item.views, 0);
+  const filteredData = chartData.filter((item: any) => (item.visitors || 0) > 0);
+  const sortedData = [...filteredData].sort((a: any, b: any) => b.visitors - a.visitors).slice(0, 7);
+  const totalVisitors = sortedData.reduce((sum: number, item: any) => sum + item.visitors, 0);
 
   if (sortedData.length === 0) {
     return (
@@ -199,7 +198,7 @@ export const TopBrowsersChart: React.FC<TopBrowsersChartProps> = ({ data, isLoad
       <div className="space-y-2">
         {sortedData.map((item: any, index: number) => {
           const browserName = getBrowserName(item.browser);
-          const percentage = ((item.views / totalViews) * 100).toFixed(1);
+          const percentage = ((item.visitors / totalVisitors) * 100).toFixed(1);
 
           return (
             <div key={index} className="flex items-center justify-between border-b p-3">
@@ -213,7 +212,7 @@ export const TopBrowsersChart: React.FC<TopBrowsersChartProps> = ({ data, isLoad
                 </div>
               </div>
               <div className="text-right flex-shrink-0">
-                <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">{formatNumber(item.views)}</div>
+                <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">{formatNumber(item.visitors)}</div>
                 <div className="text-muted-foreground text-xs">{percentage}%</div>
               </div>
             </div>

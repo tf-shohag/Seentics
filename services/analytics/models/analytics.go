@@ -62,28 +62,32 @@ type SourceStat struct {
 type CountryStat struct {
 	Country    string   `json:"country" db:"country"`
 	Views      int      `json:"views" db:"views"`
-	Unique     int      `json:"unique" db:"unique"`
+	Visitors   int      `json:"visitors" db:"visitors"`    // For frontend compatibility
+	Unique     int      `json:"unique" db:"unique"`        // Deprecated
 	BounceRate *float64 `json:"bounce_rate,omitempty" db:"bounce_rate"`
 }
 
 type BrowserStat struct {
 	Browser    string   `json:"browser" db:"browser"`
 	Views      int      `json:"views" db:"views"`
-	Unique     int      `json:"unique" db:"unique"`
+	Visitors   int      `json:"visitors" db:"visitors"`    // For frontend compatibility
+	Unique     int      `json:"unique" db:"unique"`        // Deprecated
 	BounceRate *float64 `json:"bounce_rate,omitempty" db:"bounce_rate"`
 }
 
 type DeviceStat struct {
 	Device     string   `json:"device" db:"device"`
 	Views      int      `json:"views" db:"views"`
-	Unique     int      `json:"unique" db:"unique"`
+	Visitors   int      `json:"visitors" db:"visitors"`    // For frontend compatibility
+	Unique     int      `json:"unique" db:"unique"`        // Deprecated
 	BounceRate *float64 `json:"bounce_rate,omitempty" db:"bounce_rate"`
 }
 
 type OSStat struct {
 	OS         string   `json:"os" db:"os"`
 	Views      int      `json:"views" db:"views"`
-	Unique     int      `json:"unique" db:"unique"`
+	Visitors   int      `json:"visitors" db:"visitors"`    // For frontend compatibility
+	Unique     int      `json:"unique" db:"unique"`        // Deprecated
 	BounceRate *float64 `json:"bounce_rate,omitempty" db:"bounce_rate"`
 }
 

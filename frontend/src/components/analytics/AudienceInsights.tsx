@@ -19,6 +19,7 @@ interface CountryStat {
 interface BrowserStat {
   browser: string;
   visitors: number;
+  views: number;
   market_share: number;
   version: string;
 }

@@ -112,6 +112,11 @@ func (s *EventService) TrackBatchEvents(ctx context.Context, req *models.BatchEv
 		}, nil
 	}
 
+	s.logger.Info().
+		Str("site_id", req.SiteID).
+		Int("events_count", len(req.Events)).
+		Msg("Processing batch events")
+
 	// Process and enrich all events
 	for i := range req.Events {
 		if req.Events[i].WebsiteID == "" {
@@ -124,6 +129,16 @@ func (s *EventService) TrackBatchEvents(ctx context.Context, req *models.BatchEv
 			req.Events[i].Timestamp = time.Now()
 		}
 
+		// Debug logging for each event
+		s.logger.Debug().
+			Str("website_id", req.Events[i].WebsiteID).
+			Str("visitor_id", req.Events[i].VisitorID).
+			Str("session_id", req.Events[i].SessionID).
+			Str("event_type", req.Events[i].EventType).
+			Str("page", req.Events[i].Page).
+			Time("timestamp", req.Events[i].Timestamp).
+			Msg("Processing individual event")
+
 		s.enrichEventData(ctx, &req.Events[i])
 	}
 
@@ -133,11 +148,23 @@ func (s *EventService) TrackBatchEvents(ctx context.Context, req *models.BatchEv
 		select {
 		case s.eventChan <- event:
 			accepted++
+			s.logger.Debug().
+				Str("event_id", event.ID.String()).
+				Str("event_type", event.EventType).
+				Msg("Event queued successfully")
 		default:
-			s.logger.Warn().Msg("Event channel full during batch")
+			s.logger.Warn().
+				Str("event_type", event.EventType).
+				Msg("Event channel full during batch")
 			break
 		}
 	}
+
+	s.logger.Info().
+		Str("site_id", req.SiteID).
+		Int("total_events", len(req.Events)).
+		Int("accepted_events", accepted).
+		Msg("Batch events processing completed")
 
 	return &models.BatchEventResponse{
 		Status:      "accepted",
@@ -239,13 +266,26 @@ func (s *EventService) processBatch(batch []models.Event) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.logger.Info().Int("events_count", len(batch)).Msg("Processing batch")
+	// Log event types and website IDs in the batch
+	eventTypes := make(map[string]int)
+	websiteIDs := make(map[string]int)
+	for _, event := range batch {
+		eventTypes[event.EventType]++
+		websiteIDs[event.WebsiteID]++
+	}
+
+	s.logger.Info().
+		Int("events_count", len(batch)).
+		Interface("event_types", eventTypes).
+		Interface("website_ids", websiteIDs).
+		Msg("Processing batch")
 
 	result, err := s.repo.CreateBatch(ctx, batch)
 	if err != nil {
 		s.logger.Error().
 			Err(err).
 			Int("events_count", len(batch)).
+			Interface("event_types", eventTypes).
 			Msg("Failed to process batch")
 		return
 	}
@@ -254,12 +294,15 @@ func (s *EventService) processBatch(batch []models.Event) {
 	s.logger.Info().
 		Int("processed", result.Processed).
 		Int("failed", result.Failed).
+		Int("total", result.Total).
 		Dur("duration", duration).
+		Interface("event_types", eventTypes).
 		Msg("Batch processed successfully")
 
 	if result.Failed > 0 {
 		s.logger.Warn().
 			Int("failed_count", result.Failed).
+			Interface("errors", result.Errors).
 			Msg("Some events failed in batch")
 	}
 }
@@ -346,9 +389,12 @@ func (s *EventService) enrichEventData(ctx context.Context, event *models.Event)
 
 		location := utils.GetLocationFromIP(*event.IPAddress)
 		
-		// Set country information
+		// Set country information - use CountryCode for the country field (VARCHAR(2))
 		if event.Country == nil || *event.Country == "" {
-			event.Country = &location.Country
+			// Use country code for the country field since it's limited to 2 characters
+			if location.CountryCode != "" {
+				event.Country = &location.CountryCode
+			}
 		}
 		if event.CountryCode == nil || *event.CountryCode == "" {
 			event.CountryCode = &location.CountryCode

@@ -61,8 +61,9 @@ func (to *TopOSAnalytics) GetTopOS(ctx context.Context, websiteID string, days i
 			continue
 		}
 
-		// Set the Unique field from the scanned value
+		// Set both Unique (deprecated) and Visitors fields from the scanned value
 		os.Unique = uniqueVisitors
+		os.Visitors = uniqueVisitors
 
 		// Cap bounce rate at 100%
 		if bounceRate != nil && *bounceRate > 100.0 {

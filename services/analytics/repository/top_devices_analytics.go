@@ -61,8 +61,9 @@ func (td *TopDevicesAnalytics) GetTopDevices(ctx context.Context, websiteID stri
 			continue
 		}
 
-		// Set the Unique field from the scanned value
+		// Set both Unique (deprecated) and Visitors fields from the scanned value
 		device.Unique = uniqueVisitors
+		device.Visitors = uniqueVisitors
 
 		// Cap bounce rate at 100%
 		if bounceRate != nil && *bounceRate > 100.0 {

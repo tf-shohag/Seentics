@@ -505,3 +505,28 @@ func (h *AnalyticsHandler) GetLiveVisitors(c *gin.Context) {
 		"timestamp":     "now",
 	})
 }
+
+// GetGeolocationBreakdown returns comprehensive geolocation analytics
+func (h *AnalyticsHandler) GetGeolocationBreakdown(c *gin.Context) {
+	websiteID := c.Param("website_id")
+	if websiteID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "website_id is required"})
+		return
+	}
+
+	days := 7
+	if d := c.Query("days"); d != "" {
+		if parsedDays, err := strconv.Atoi(d); err == nil && parsedDays > 0 {
+			days = parsedDays
+		}
+	}
+
+	breakdown, err := h.service.GetGeolocationBreakdown(c.Request.Context(), websiteID, days)
+	if err != nil {
+		h.logger.Error().Err(err).Msg("Failed to get geolocation breakdown")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get geolocation breakdown"})
+		return
+	}
+
+	c.JSON(http.StatusOK, breakdown)
+}

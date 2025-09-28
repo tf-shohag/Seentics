@@ -2,6 +2,7 @@
 
 import { AudienceInsights } from '@/components/analytics/AudienceInsights';
 import { ContentPerformance } from '@/components/analytics/ContentPerformance';
+import { GeolocationOverview } from '@/components/analytics/GeolocationOverview';
 import { TrafficOverview } from '@/components/analytics/TrafficOverview';
 import { UTMPerformanceChart } from '@/components/analytics/UTMPerformanceChart';
 import { Button } from '@/components/ui/button';
@@ -15,7 +16,7 @@ import {
   useCustomEvents,
   useDailyStats,
   useDashboardData,
-
+  useGeolocationBreakdown,
   useHourlyStats,
   useTopBrowsers,
   useTopCountries,
@@ -159,6 +160,7 @@ export default function AnalyticsPage({ params }: AnalyticsPageProps) {
   const trafficChartError = dailyError;
   const { data: customEvents, isLoading: customEventsLoading } = useCustomEvents(websiteId, dateRange);
   const { data: hourlyStats, isLoading: hourlyLoading } = useHourlyStats(websiteId, dateRange);
+  const { data: geolocationData, isLoading: geolocationLoading, error: geolocationError } = useGeolocationBreakdown(websiteId, dateRange);
 
   // Fetch activity trends data
   const { data: activityTrends, isLoading: trendsLoading, error: trendsError } = useActivityTrends(websiteId);
@@ -547,6 +549,12 @@ export default function AnalyticsPage({ params }: AnalyticsPageProps) {
         dailyStats={trafficSummaryChart || dailyStats}
         hourlyStats={hourlyStats}
         isLoading={dashboardLoading || dailyLoading || trafficChartLoading}
+      />
+
+      {/* Geolocation Overview - Full Width */}
+      <GeolocationOverview
+        data={geolocationData}
+        isLoading={geolocationLoading}
       />
 
       {/* 2 Cards in 2x2 Grid */}

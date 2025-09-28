@@ -1229,3 +1229,47 @@ export const useCompareFunnels = () => {
     }) => compareFunnels(websiteId, funnelIds, dateRange || 7),
   });
 };
+
+// =============================================================================
+// GEOLOCATION ANALYTICS
+// =============================================================================
+
+export interface GeolocationData {
+  countries: Array<{
+    name: string;
+    count: number;
+    percentage: number;
+  }>;
+  continents: Array<{
+    name: string;
+    count: number;
+    percentage: number;
+  }>;
+  regions: Array<{
+    name: string;
+    count: number;
+    percentage: number;
+  }>;
+  cities: Array<{
+    name: string;
+    count: number;
+    percentage: number;
+  }>;
+}
+
+// API Functions
+export const getGeolocationBreakdown = async (websiteId: string, days: number = 7): Promise<GeolocationData> => {
+  const response = await api.get(`/analytics/geolocation-breakdown/${websiteId}?days=${days}`);
+  return response.data;
+};
+
+// Hooks
+export const useGeolocationBreakdown = (websiteId: string, days: number = 7) => {
+  return useQuery({
+    queryKey: [...analyticsKeys.all, 'geolocation-breakdown', websiteId, days],
+    queryFn: () => getGeolocationBreakdown(websiteId, days),
+    enabled: !!websiteId,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: 2,
+  });
+};

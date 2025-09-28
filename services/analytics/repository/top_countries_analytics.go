@@ -62,8 +62,9 @@ func (tc *TopCountriesAnalytics) GetTopCountries(ctx context.Context, websiteID 
 			continue
 		}
 
-		// Set the Unique field from the scanned value
+		// Set both Unique (deprecated) and Visitors fields from the scanned value
 		country.Unique = uniqueVisitors
+		country.Visitors = uniqueVisitors
 
 		// Cap bounce rate at 100%
 		if bounceRate != nil && *bounceRate > 100.0 {
