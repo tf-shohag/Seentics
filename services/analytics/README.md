@@ -1,12 +1,12 @@
 # Analytics Service
 
-A high-performance analytics microservice built with Go, designed to handle real-time website analytics, funnel tracking, and user behavior analysis using TimescaleDB.
+A high-performance analytics microservice built with Go, designed to handle real-time website analytics, funnel tracking, and user behavior analysis using PostgreSQL.
 
 ## Features
 
 - **Real-time Analytics**: Track page views, user sessions, and custom events
 - **Funnel Tracking**: Monitor user journey through conversion funnels
-- **Performance Optimized**: Uses TimescaleDB for time-series data with compression and retention policies
+- **Performance Optimized**: Uses PostgreSQL with native partitioning for time-series data optimization
 - **Scalable Architecture**: Built with Go for high performance and low resource usage
 - **RESTful API**: Clean HTTP API for easy integration
 - **Health Monitoring**: Built-in health checks and monitoring endpoints
@@ -15,7 +15,7 @@ A high-performance analytics microservice built with Go, designed to handle real
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   API Gateway  │───▶│ Analytics API   │───▶│  TimescaleDB    │
+│   API Gateway  │───▶│ Analytics API   │───▶│  PostgreSQL     │
 │                │    │                 │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                                 │
@@ -30,7 +30,7 @@ A high-performance analytics microservice built with Go, designed to handle real
 
 - Go 1.21+
 - Docker and Docker Compose
-- TimescaleDB (PostgreSQL with TimescaleDB extension)
+- PostgreSQL 15+
 
 ## Quick Start with Docker
 
@@ -94,15 +94,15 @@ AGGREGATION_TIME=00:00
 
 ### 3. Setup Database
 
-The service uses TimescaleDB (PostgreSQL with TimescaleDB extension). You can run it with Docker:
+The service uses PostgreSQL. You can run it with Docker:
 
 ```bash
-docker run -d --name timescaledb \
+docker run -d --name postgres \
   -e POSTGRES_USER=user \
   -e POSTGRES_PASSWORD=pass \
   -e POSTGRES_DB=analytics \
   -p 5432:5432 \
-  timescale/timescaledb:latest-pg14
+  postgres:15-alpine
 ```
 
 ### 4. Run Migrations
@@ -164,7 +164,7 @@ go build -o analytics-app .
 |----------|---------|-------------|
 | `ENVIRONMENT` | `development` | Environment (development/production) |
 | `PORT` | `3002` | Service port |
-| `DATABASE_URL` | `postgres://...` | TimescaleDB connection string |
+| `DATABASE_URL` | `postgres://...` | PostgreSQL connection string |
 | `LOG_LEVEL` | `info` | Logging level |
 | `JWT_SECRET` | `your-secret-key` | JWT signing secret |
 | `BATCH_SIZE` | `1000` | Event batch size for processing |
@@ -177,10 +177,10 @@ go build -o analytics-app .
 
 ### Database Configuration
 
-The service is optimized for TimescaleDB with the following features:
+The service is optimized for PostgreSQL with the following features:
 
-- **Hypertables**: Automatic partitioning by time
-- **Compression**: Data compression after 7 days
+- **Partitioning**: Automatic partitioning by time for better performance
+- **Indexing**: Optimized indexes for time-series queries
 - **Retention**: Automatic data cleanup after 90 days
 - **Continuous Aggregates**: Pre-computed hourly and daily statistics
 - **Connection Pooling**: Optimized connection management
@@ -239,7 +239,7 @@ gosec ./...
 The service includes built-in health monitoring:
 
 - **Health Endpoint**: `GET /health` returns service status
-- **Database Connectivity**: Checks TimescaleDB connection
+- **Database Connectivity**: Checks PostgreSQL connection
 - **Docker Health Check**: Container-level health monitoring
 - **Structured Logging**: JSON-formatted logs with correlation IDs
 
@@ -250,7 +250,7 @@ The service includes built-in health monitoring:
 - Connection pooling with configurable limits
 - Prepared statements for repeated queries
 - Indexes on frequently queried columns
-- TimescaleDB compression and retention policies
+- PostgreSQL partitioning and indexing optimizations
 
 ### Application Optimization
 
@@ -264,18 +264,18 @@ The service includes built-in health monitoring:
 ### Common Issues
 
 1. **Database Connection Failed**
-   - Check TimescaleDB is running
+   - Check PostgreSQL is running
    - Verify connection string in environment
    - Ensure network connectivity
 
 2. **Migration Errors**
-   - Check TimescaleDB extension is enabled
+   - Check PostgreSQL is accessible
    - Verify database user permissions
    - Check migration file syntax
 
 3. **Performance Issues**
    - Monitor database connection pool usage
-   - Check TimescaleDB compression status
+   - Check PostgreSQL partition performance
    - Review query performance with `EXPLAIN ANALYZE`
 
 ### Logs
@@ -285,7 +285,7 @@ The service includes built-in health monitoring:
 docker-compose logs -f analytics-service
 
 # View database logs
-docker-compose logs -f timescaledb
+docker-compose logs -f postgres
 ```
 
 ## Contributing

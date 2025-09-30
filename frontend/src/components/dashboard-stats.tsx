@@ -40,7 +40,7 @@ export function DashboardStats({ siteId }: DashboardStatsProps) {
       title: 'Total Visitors',
       value: dashboardData?.unique_visitors || 0,
       icon: Users,
-      change: dashboardData?.comparison?.visitor_change !== undefined ?
+      change: dashboardData?.comparison?.visitor_change !== undefined && dashboardData.comparison.visitor_change !== null ?
         dashboardData.comparison.visitor_change === 0 ? 'New' :
           `${dashboardData.comparison.visitor_change > 0 ? '+' : ''}${dashboardData.comparison.visitor_change.toFixed(1)}%` :
         'No change data',
@@ -49,7 +49,7 @@ export function DashboardStats({ siteId }: DashboardStatsProps) {
       title: 'Page Views',
       value: dashboardData?.page_views || 0,
       icon: Eye,
-      change: dashboardData?.comparison?.pageview_change !== undefined ?
+      change: dashboardData?.comparison?.pageview_change !== undefined && dashboardData.comparison.pageview_change !== null ?
         dashboardData.comparison.pageview_change === 0 ? 'New' :
           `${dashboardData.comparison.pageview_change > 0 ? '+' : ''}${dashboardData.comparison.pageview_change.toFixed(1)}%` :
         'No change data',

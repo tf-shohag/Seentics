@@ -360,6 +360,7 @@ func (h *AnalyticsHandler) GetDailyStats(c *gin.Context) {
 		}
 	}
 
+	// Get real data from database via service
 	stats, err := h.service.GetDailyStats(c.Request.Context(), websiteID, days)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("Failed to get daily stats")

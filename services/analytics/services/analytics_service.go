@@ -56,7 +56,7 @@ func (s *AnalyticsService) GetDashboard(ctx context.Context, websiteID string, d
 
 	return &models.DashboardData{
 		WebsiteID:       websiteID,
-		DateRange:       fmt.Sprintf("%d days", days),
+		DateRange:       days,
 		TotalVisitors:   metrics.TotalVisitors,
 		UniqueVisitors:  metrics.UniqueVisitors,
 		LiveVisitors:    liveVisitors,
@@ -160,9 +160,20 @@ func (s *AnalyticsService) GetDailyStats(ctx context.Context, websiteID string, 
 	s.logger.Info().
 		Str("website_id", websiteID).
 		Int("days", days).
-		Msg("Getting daily statistics")
+		Msg("Getting daily statistics from database")
 
-	return s.repo.GetDailyStats(ctx, websiteID, days)
+	// Use the repository to get real data from database
+	result, err := s.repo.GetDailyStats(ctx, websiteID, days)
+	if err != nil {
+		s.logger.Error().Err(err).Msg("Failed to get daily stats from repository")
+		return nil, err
+	}
+
+	s.logger.Info().
+		Int("result_count", len(result)).
+		Msg("Successfully retrieved daily stats")
+
+	return result, nil
 }
 
 func (s *AnalyticsService) GetHourlyStats(ctx context.Context, websiteID string, days int, timezone string) ([]models.HourlyStat, error) {

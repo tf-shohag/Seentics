@@ -38,34 +38,34 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 		return
 	}
 
-	// Check TimescaleDB extension
-	var hasTimescale bool
-	err := h.db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'timescaledb')").Scan(&hasTimescale)
+	// Check PostgreSQL version
+	var version string
+	err := h.db.QueryRow(ctx, "SELECT version()").Scan(&version)
 	if err != nil {
-		h.logger.Error().Err(err).Msg("TimescaleDB extension check failed")
+		h.logger.Error().Err(err).Msg("PostgreSQL version check failed")
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status":    "unhealthy",
 			"database":  "connected",
-			"timescale": "unknown",
+			"postgres":  "unknown",
 			"error":     err.Error(),
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 		})
 		return
 	}
 
-	// Check if events table is a hypertable
-	var isHypertable bool
-	err = h.db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM timescaledb_information.hypertables WHERE hypertable_name = 'events')").Scan(&isHypertable)
+	// Check if events table exists and has partitions
+	var hasPartitions bool
+	err = h.db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_tables WHERE tablename LIKE 'events_y%m%' AND schemaname = 'public')").Scan(&hasPartitions)
 	if err != nil {
-		h.logger.Warn().Err(err).Msg("Hypertable check failed")
-		isHypertable = false
+		h.logger.Warn().Err(err).Msg("Partition check failed")
+		hasPartitions = false
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":     "healthy",
 		"database":   "connected",
-		"timescale":  hasTimescale,
-		"hypertable": isHypertable,
+		"postgres":   "available",
+		"partitions": hasPartitions,
 		"timestamp":  time.Now().UTC().Format(time.RFC3339),
 		"version":    "1.0.0",
 	})

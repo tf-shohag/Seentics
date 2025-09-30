@@ -1,7 +1,7 @@
--- Initial schema for analytics service
+-- Initial schema for analytics service (PostgreSQL compatible)
 -- Consolidated schema with all required tables and proper field sizes
 
--- Create events table
+-- Create events table (partitioned by timestamp for better performance)
 CREATE TABLE events (
     id UUID DEFAULT gen_random_uuid(),
     website_id VARCHAR(24) NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE events (
     timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (id, timestamp)
-);
+) PARTITION BY RANGE (timestamp);
 
 -- Create funnel_events table for funnel tracking
 CREATE TABLE funnel_events (
@@ -86,11 +86,6 @@ CREATE TABLE privacy_requests (
     data JSONB
 );
 
--- Convert tables to hypertables (TimescaleDB)
-SELECT create_hypertable('events', 'timestamp', if_not_exists => TRUE);
-SELECT create_hypertable('funnel_events', 'created_at', if_not_exists => TRUE);
-SELECT create_hypertable('custom_events_aggregated', 'last_seen', if_not_exists => TRUE);
-
 -- Create indexes for better query performance
 CREATE INDEX idx_events_website_timestamp ON events(website_id, timestamp DESC);
 CREATE INDEX idx_events_visitor_id ON events(visitor_id);
@@ -110,31 +105,11 @@ CREATE INDEX idx_custom_events_aggregated_website_signature ON custom_events_agg
 CREATE INDEX idx_custom_events_last_seen ON custom_events_aggregated(last_seen);
 CREATE INDEX idx_privacy_requests_website_id ON privacy_requests(website_id);
 
--- Enable compression on hypertables
-ALTER TABLE events SET (
-    timescaledb.compress,
-    timescaledb.compress_segmentby = 'website_id',
-    timescaledb.compress_orderby = 'timestamp DESC, id'
-);
-
-ALTER TABLE funnel_events SET (
-    timescaledb.compress,
-    timescaledb.compress_segmentby = 'website_id',
-    timescaledb.compress_orderby = 'created_at DESC, id'
-);
-
-ALTER TABLE custom_events_aggregated SET (
-    timescaledb.compress,
-    timescaledb.compress_segmentby = 'website_id',
-    timescaledb.compress_orderby = 'last_seen DESC, id'
-);
-
--- Add compression policies (compress data older than 7 days)
-SELECT add_compression_policy('events', INTERVAL '7 days', if_not_exists => TRUE);
-SELECT add_compression_policy('funnel_events', INTERVAL '7 days', if_not_exists => TRUE);
-SELECT add_compression_policy('custom_events_aggregated', INTERVAL '7 days', if_not_exists => TRUE);
-
--- Add retention policies (keep data for 1 year)
-SELECT add_retention_policy('events', INTERVAL '1 year', if_not_exists => TRUE);
-SELECT add_retention_policy('funnel_events', INTERVAL '1 year', if_not_exists => TRUE);
-SELECT add_retention_policy('custom_events_aggregated', INTERVAL '1 year', if_not_exists => TRUE);
+-- Create initial partitions for events table (PostgreSQL native partitioning)
+-- This provides similar benefits to specialized time-series databases for time-series data
+CREATE TABLE events_y2024m10 PARTITION OF events FOR VALUES FROM ('2024-10-01') TO ('2024-11-01');
+CREATE TABLE events_y2024m11 PARTITION OF events FOR VALUES FROM ('2024-11-01') TO ('2024-12-01');
+CREATE TABLE events_y2024m12 PARTITION OF events FOR VALUES FROM ('2024-12-01') TO ('2025-01-01');
+CREATE TABLE events_y2025m01 PARTITION OF events FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
+CREATE TABLE events_y2025m02 PARTITION OF events FOR VALUES FROM ('2025-02-01') TO ('2025-03-01');
+CREATE TABLE events_y2025m03 PARTITION OF events FOR VALUES FROM ('2025-03-01') TO ('2025-04-01');

@@ -3,6 +3,7 @@ package repository
 import (
 	"analytics-app/models"
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,22 +19,26 @@ func NewTimeSeriesAnalytics(db *pgxpool.Pool) *TimeSeriesAnalytics {
 
 // GetDailyStats returns daily statistics for a website
 func (ts *TimeSeriesAnalytics) GetDailyStats(ctx context.Context, websiteID string, days int) ([]models.DailyStat, error) {
+	// Use a working query pattern similar to hourly stats
 	query := `
 		SELECT 
-			DATE(timestamp) as date,
+			DATE(timestamp)::text as date,
 			COUNT(*) as views,
 			COUNT(DISTINCT visitor_id) as unique_visitors
 		FROM events
 		WHERE website_id = $1 
-		AND timestamp >= NOW() - INTERVAL '1 day' * $2
+		AND timestamp >= NOW() - INTERVAL '%d days'
 		AND event_type = 'pageview'
 		GROUP BY DATE(timestamp)
 		ORDER BY date DESC
-		LIMIT $2`
+		LIMIT %d`
 
-	rows, err := ts.db.Query(ctx, query, websiteID, days)
+	// Format the query with days parameter
+	formattedQuery := fmt.Sprintf(query, days, days)
+	
+	rows, err := ts.db.Query(ctx, formattedQuery, websiteID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query failed: %w", err)
 	}
 	defer rows.Close()
 
@@ -43,10 +48,15 @@ func (ts *TimeSeriesAnalytics) GetDailyStats(ctx context.Context, websiteID stri
 		var uniqueVisitors int
 		err := rows.Scan(&stat.Date, &stat.Views, &uniqueVisitors)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("scan failed: %w", err)
 		}
 		stat.Unique = uniqueVisitors
 		stats = append(stats, stat)
+	}
+
+	// Check for any iteration errors
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration failed: %w", err)
 	}
 
 	return stats, nil
@@ -95,7 +105,7 @@ func (ts *TimeSeriesAnalytics) GetHourlyStats(ctx context.Context, websiteID str
 		localTime := timestamp.In(loc)
 		stat.Timestamp = localTime
 		stat.Unique = uniqueVisitors
-		stat.Hour = localTime.Hour()
+		stat.Hour = fmt.Sprintf("%d", localTime.Hour())
 		stat.HourLabel = localTime.Format("15:04")
 		stats = append(stats, stat)
 	}

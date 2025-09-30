@@ -3,6 +3,7 @@ package repository
 import (
 	"analytics-app/models"
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -105,7 +106,10 @@ func (r *MainAnalyticsRepository) GetTrafficSummary(ctx context.Context, website
 
 // Time Series Analytics Methods
 func (r *MainAnalyticsRepository) GetDailyStats(ctx context.Context, websiteID string, days int) ([]models.DailyStat, error) {
-	return r.timeSeries.GetDailyStats(ctx, websiteID, days)
+	fmt.Printf("DEBUG: MainAnalyticsRepository.GetDailyStats called\n")
+	result, err := r.timeSeries.GetDailyStats(ctx, websiteID, days)
+	fmt.Printf("DEBUG: MainAnalyticsRepository.GetDailyStats returning %d results, err: %v\n", len(result), err)
+	return result, err
 }
 
 func (r *MainAnalyticsRepository) GetHourlyStats(ctx context.Context, websiteID string, days int, timezone string) ([]models.HourlyStat, error) {

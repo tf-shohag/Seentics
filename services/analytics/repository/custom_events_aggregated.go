@@ -47,7 +47,7 @@ func (r *CustomEventsAggregatedRepository) UpsertCustomEvent(ctx context.Context
 		}
 	}
 
-	// Use a different approach for TimescaleDB - check if exists and update or insert
+	// Use a different approach for PostgreSQL - check if exists and update or insert
 	// First, try to find existing record within recent time window
 	checkQuery := `
 		SELECT id, count, first_seen FROM custom_events_aggregated 

@@ -115,7 +115,7 @@ func (tp *TopPagesAnalytics) GetTopPages(ctx context.Context, websiteID string, 
 	for rows.Next() {
 		var page models.PageStat
 		var bounceRate, entryRate *float64
-		var avgTime *int
+		var avgTime *float64
 		var uniqueVisitors int
 		var rawPage string
 
@@ -328,7 +328,7 @@ func (tp *TopPagesAnalytics) GetTopPagesWithTimeBucket(ctx context.Context, webs
 	for rows.Next() {
 		var page models.PageStat
 		var bounceRate, exitRate *float64
-		var avgTime *int
+		var avgTime *float64
 		var uniqueVisitors int
 		var rawPage string
 

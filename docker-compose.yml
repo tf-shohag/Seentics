@@ -56,7 +56,7 @@ services:
     environment:
       - ENVIRONMENT
       - PORT=3002
-      - DATABASE_URL=postgres://seentics:seentics_postgres_pass@timescaledb:5432/seentics_analytics?sslmode=disable
+      - DATABASE_URL=postgres://seentics:seentics_postgres_pass@postgres:5432/seentics_analytics?sslmode=disable
       - LOG_LEVEL=info
       - JWT_SECRET=${JWT_SECRET}
       - REDIS_URL=redis://:seentics_redis_pass@redis:6379
@@ -68,7 +68,7 @@ services:
     volumes:
       - maxmind-data:/data
     depends_on:
-      timescaledb:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -134,9 +134,9 @@ services:
       retries: 5
       start_period: 10s
 
-  timescaledb:
-    image: timescale/timescaledb:latest-pg14
-    container_name: timescaledb
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
     ports:
       - "5432:5432"
     environment:
@@ -144,11 +144,10 @@ services:
       POSTGRES_PASSWORD: seentics_postgres_pass
       POSTGRES_DB: seentics_analytics
     volumes:
-      - timescaledb-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     networks:
       - seentics-network
     restart: unless-stopped
-    command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U seentics -d seentics_analytics -h localhost -p 5432"]
       interval: 5s
@@ -176,7 +175,7 @@ services:
 
 volumes:
   mongo-data:
-  timescaledb-data:
+  postgres-data:
   redis-data:
   maxmind-data:
 
