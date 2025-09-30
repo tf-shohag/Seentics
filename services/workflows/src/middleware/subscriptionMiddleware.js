@@ -1,6 +1,11 @@
 import axios from 'axios';
 import { config } from '../config/config.js';
 
+// Check if cloud features are enabled
+const isCloudFeaturesEnabled = () => {
+  return process.env.CLOUD_FEATURES_ENABLED === 'true';
+};
+
 // Plan limits configuration (mirrored from users service)
 const PLAN_LIMITS = {
   free: {
@@ -30,6 +35,11 @@ const PLAN_LIMITS = {
 export const checkSubscriptionLimit = (limitType) => {
   return async (req, res, next) => {
     try {
+      // Skip usage limits in open source deployment
+      if (!isCloudFeaturesEnabled()) {
+        return next();
+      }
+
       const userId = req.user?._id || req.user?.id || req.headers['x-user-id'];
       const userPlan = req.headers['x-user-plan'] || 'free';
       const userStatus = req.headers['x-user-status'] || 'active';

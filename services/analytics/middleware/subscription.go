@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"analytics-app/config"
 	"analytics-app/utils"
 	"bytes"
 	"encoding/json"
@@ -51,6 +52,12 @@ func NewSubscriptionMiddleware(logger zerolog.Logger) *SubscriptionMiddleware {
 // CheckFunnelLimit middleware to check if user can create more funnels
 func (s *SubscriptionMiddleware) CheckFunnelLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Skip usage limits in open source deployment
+		if config.IsOpenSource() {
+			c.Next()
+			return
+		}
+
 		userID := c.GetHeader("X-User-ID")
 		if userID == "" {
 			s.logger.Error().Msg("Missing user ID in request headers")
@@ -134,6 +141,12 @@ func (s *SubscriptionMiddleware) checkUsageLimits(userID, resourceType string) (
 // CheckEventLimit middleware to check if user can track events (in-memory check)
 func (s *SubscriptionMiddleware) CheckEventLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Skip usage limits in open source deployment
+		if config.IsOpenSource() {
+			c.Next()
+			return
+		}
+
 		userID := c.GetHeader("x-user-id")
 		if userID == "" {
 			s.logger.Warn().Msg("No user ID found in headers for event limit check")
@@ -167,6 +180,12 @@ func (s *SubscriptionMiddleware) CheckEventLimit() gin.HandlerFunc {
 // CheckBatchEventLimit middleware for batch event endpoints (in-memory check)
 func (s *SubscriptionMiddleware) CheckBatchEventLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Skip usage limits in open source deployment
+		if config.IsOpenSource() {
+			c.Next()
+			return
+		}
+
 		userID := c.GetHeader("x-user-id")
 		if userID == "" {
 			s.logger.Warn().Msg("No user ID found in headers for batch event limit check")

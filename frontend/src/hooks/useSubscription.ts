@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/stores/useAuthStore';
+import { hasFeature, isOpenSource } from '@/lib/features';
 import api from '@/lib/api';
 
 export interface UsageStatus {
@@ -58,6 +59,26 @@ export const useSubscription = (): UseSubscriptionReturn => {
       setLoading(true);
       setError(null);
 
+      // In open source mode, return unlimited usage
+      if (isOpenSource()) {
+        setSubscription({
+          id: user.id,
+          plan: 'free',
+          status: 'active',
+          usage: {
+            websites: { current: 0, limit: -1, canCreate: true },
+            workflows: { current: 0, limit: -1, canCreate: true },
+            funnels: { current: 0, limit: -1, canCreate: true },
+            monthlyEvents: { current: 0, limit: -1, canCreate: true }
+          },
+          features: ['unlimited_everything'],
+          isActive: true
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Cloud mode - fetch from API
       const response = await api.get('/user/billing/usage');
       
       if (response.data.success) {
@@ -74,7 +95,25 @@ export const useSubscription = (): UseSubscriptionReturn => {
       }
     } catch (err: any) {
       console.error('Error fetching subscription:', err);
-      setError(err.response?.data?.message || err.message || 'Unknown error occurred');
+      
+      // In open source mode, fallback to unlimited on API error
+      if (isOpenSource()) {
+        setSubscription({
+          id: user.id,
+          plan: 'free',
+          status: 'active',
+          usage: {
+            websites: { current: 0, limit: -1, canCreate: true },
+            workflows: { current: 0, limit: -1, canCreate: true },
+            funnels: { current: 0, limit: -1, canCreate: true },
+            monthlyEvents: { current: 0, limit: -1, canCreate: true }
+          },
+          features: ['unlimited_everything'],
+          isActive: true
+        });
+      } else {
+        setError(err.response?.data?.message || err.message || 'Unknown error occurred');
+      }
     } finally {
       setLoading(false);
     }
@@ -92,22 +131,32 @@ export const useSubscription = (): UseSubscriptionReturn => {
   const canTrackEvents = useCallback((count: number = 1): boolean => {
     if (!subscription?.usage?.monthlyEvents) return false;
     const { current, limit } = subscription.usage.monthlyEvents;
+    // Always allow if unlimited
+    if (limit === -1) return true;
     return (current + count) <= limit;
   }, [subscription]);
 
   const getUsagePercentage = useCallback((type: keyof SubscriptionUsage): number => {
     if (!subscription?.usage?.[type]) return 0;
     const { current, limit } = subscription.usage[type];
+    // Handle unlimited (-1) limits
+    if (limit === -1) return 0;
     return Math.min((current / limit) * 100, 100);
   }, [subscription]);
 
   const isNearLimit = useCallback((type: keyof SubscriptionUsage, threshold: number = 80): boolean => {
+    if (!subscription?.usage?.[type]) return false;
+    const { limit } = subscription.usage[type];
+    // Never near limit if unlimited
+    if (limit === -1) return false;
     return getUsagePercentage(type) >= threshold;
-  }, [getUsagePercentage]);
+  }, [getUsagePercentage, subscription]);
 
   const hasReachedLimit = useCallback((type: keyof SubscriptionUsage): boolean => {
     if (!subscription?.usage?.[type]) return false;
     const { current, limit } = subscription.usage[type];
+    // Never reached limit if unlimited
+    if (limit === -1) return false;
     return current >= limit;
   }, [subscription]);
 

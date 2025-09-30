@@ -2,6 +2,22 @@ import User from '../../models/User.js';
 import Subscription, { SUBSCRIPTION_PLANS } from '../../models/Subscription.js';
 import { lemonSqueezyApiInstance } from '../../utils/lemonsqueezy.js';
 
+// Check if cloud features are enabled
+const isCloudFeaturesEnabled = () => {
+  return process.env.CLOUD_FEATURES_ENABLED === 'true';
+};
+
+// Middleware to check if billing features are enabled
+export const requireCloudFeatures = (req, res, next) => {
+  if (!isCloudFeaturesEnabled()) {
+    return res.status(404).json({
+      success: false,
+      message: 'Billing features are not available in open source deployment'
+    });
+  }
+  next();
+};
+
 // Get user's current subscription
 export const getSubscription = async (req, res) => {
   try {
@@ -113,16 +129,15 @@ export const createCheckoutSession = async (req, res) => {
     const response = await lemonSqueezyApiInstance.post('/checkouts', checkoutData);
     
     res.json({
-      success: true,
       data: {
         checkoutUrl: response.data.data.attributes.url
       }
     });
   } catch (error) {
-    console.error('Checkout creation error:', error);
+    console.error('Error updating usage:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to create checkout session',
+      message: 'Failed to update usage',
       error: error.message
     });
   }

@@ -7,10 +7,14 @@ import {
   cancelSubscription,
   getBillingHistory,
   checkUsageLimits,
-  incrementUsage
+  incrementUsage,
+  requireCloudFeatures
 } from '../controllers/billing/billingController.js';
 
 const router = express.Router();
+
+// All billing routes require cloud features to be enabled
+router.use(requireCloudFeatures);
 
 // Get current subscription
 router.get('/subscription', authenticate, getSubscription);

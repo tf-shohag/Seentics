@@ -4,9 +4,10 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, TrendingUp, Zap } from 'lucide-react';
+import { AlertTriangle, TrendingUp, Zap, Infinity } from 'lucide-react';
 import { useSubscription, SubscriptionUsage } from '@/hooks/useSubscription';
 import { UpgradePlanModal } from './UpgradePlanModal';
+import { hasFeature, isOpenSource } from '@/lib/features';
 
 interface UsageCardProps {
   type: keyof SubscriptionUsage;
@@ -30,6 +31,36 @@ export const UsageCard: React.FC<UsageCardProps> = ({
 }) => {
   const { subscription, hasReachedLimit, isNearLimit, getUsagePercentage } = useSubscription();
   const [showUpgradeModal, setShowUpgradeModal] = React.useState(false);
+
+  // Hide usage limits in open source version
+  if (!hasFeature('USAGE_LIMITS_UI')) {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Icon className="h-4 w-4" />
+            {title}
+          </CardTitle>
+          <Infinity className="h-4 w-4 text-green-600 dark:text-green-400" />
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-2xl font-bold text-green-600 dark:text-green-400">
+                ∞
+              </span>
+              <span className="text-sm text-slate-500 dark:text-slate-400">
+                Unlimited
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Open source deployment - no limits applied
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!subscription?.usage?.[type]) {
     return null;

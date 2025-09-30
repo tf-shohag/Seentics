@@ -2,6 +2,7 @@
 
 import { Logo } from '@/components/ui/logo'
 import { useLayoutStore } from '@/stores/useLayoutStore'
+import { hasFeature } from '@/lib/features'
 import {
   BarChart3,
   ChevronDown,
@@ -41,7 +42,7 @@ export default function Sidebar() {
   const websiteId = params.websiteId
 
 
-  // Generate navigation items based on context
+  // Generate navigation items based on context and feature flags
   const getNavigationItems = () => {
     const baseItems = [
       { name: 'Dashboard', href: '', icon: Home },
@@ -60,28 +61,31 @@ export default function Sidebar() {
         href: 'funnels',
         icon: Target,
       },
-      {
+    ];
+
+    // Add cloud-only features if enabled
+    if (hasFeature('BILLING_PAGE')) {
+      baseItems.push({
         name: 'Billing',
         href: 'billing',
         icon: CreditCard,
-      },
-      {
+      });
+    }
+
+    if (hasFeature('SUPPORT_CHAT')) {
+      baseItems.push({
         name: 'Support',
         href: 'support',
         icon: HelpCircle,
-      },
+      });
+    }
 
-    ];
-
-    // Add website-specific items
-    baseItems.push(
-      {
-        name: 'Privacy',
-        href: 'privacy',
-        icon: Shield,
-      },
-    );
-
+    // Add privacy settings (always available)
+    baseItems.push({
+      name: 'Privacy',
+      href: 'privacy',
+      icon: Shield,
+    });
 
     return baseItems;
   };

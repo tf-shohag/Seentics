@@ -2,11 +2,12 @@
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Globe, Workflow, Filter, BarChart3, Crown, Zap } from 'lucide-react';
+import { Globe, Workflow, Filter, BarChart3, Crown, Zap, Infinity } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
 import { UsageCard } from './UsageCard';
 import { Button } from '@/components/ui/button';
 import { UpgradePlanModal } from './UpgradePlanModal';
+import { hasFeature, isOpenSource } from '@/lib/features';
 
 export const UsageDashboard: React.FC = () => {
   const { subscription, loading } = useSubscription();
@@ -28,6 +29,36 @@ export const UsageDashboard: React.FC = () => {
             </CardContent>
           </Card>
         ))}
+      </div>
+    );
+  }
+
+  // Show open source version
+  if (!hasFeature('USAGE_LIMITS_UI')) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Infinity className="h-5 w-5 text-green-600 dark:text-green-400" />
+                <span>Open Source</span>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+              You're running the open source version with unlimited usage.
+            </p>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <UsageCard type="websites" title="Websites" icon={Globe} />
+          <UsageCard type="workflows" title="Workflows" icon={Workflow} />
+          <UsageCard type="funnels" title="Funnels" icon={Filter} />
+          <UsageCard type="monthlyEvents" title="Monthly Events" icon={BarChart3} />
+        </div>
       </div>
     );
   }

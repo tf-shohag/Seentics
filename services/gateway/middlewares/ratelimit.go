@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/seentics/seentics/services/gateway/cache"
+	"github.com/seentics/seentics/services/gateway/config"
 	"github.com/seentics/seentics/services/gateway/utils"
 )
 
@@ -25,6 +26,11 @@ var rateLimits = map[string]struct {
 // Rate limiter middleware
 func RateLimiterMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip rate limiting in open source deployment
+		if config.IsOpenSource() {
+			next.ServeHTTP(w, r)
+			return
+		}
 		// Determine route type
 		routeType := "unprotected"
 		if strings.HasPrefix(r.URL.Path, "/api/v1/auth/") {

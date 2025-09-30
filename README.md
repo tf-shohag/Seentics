@@ -7,6 +7,18 @@
 
 **🚀 Production-ready open-source platform** combining real-time analytics, visual workflow automation, and intelligent user behavior tracking. Built with modern microservices architecture for high performance and scalability.
 
+## 🌟 **Open Source First**
+
+Seentics is designed as a **fully-featured open source platform** with unlimited usage:
+
+- ✅ **Unlimited everything** - websites, workflows, funnels, events
+- ✅ **No usage restrictions** or billing limitations  
+- ✅ **Complete self-hosted control** over your data
+- ✅ **All core features** - analytics, workflows, automation
+- ✅ **Production-ready** for any scale of deployment
+
+> **Note**: We also offer a hosted cloud service at [seentics.com](https://seentics.com) for those who prefer a managed solution. The codebase includes cloud mode features, but these are reserved for our official hosted service only.
+
 ## ✨ **What Makes Seentics Special**
 
 - **🎯 Visual Workflow Builder**: Drag-and-drop automation with 50+ triggers, conditions, and actions
@@ -138,8 +150,11 @@ docker compose up -d mongodb timescaledb redis
 ### **3. Configure Environment Variables**
 ```bash
 # Copy environment templates
-cp env.example .env
-cp frontend/env.example frontend/.env.local
+cp .env.example .env
+cp frontend/.env.example frontend/.env.local
+
+# The platform runs in open source mode by default
+# No additional configuration needed for full functionality
 
 # Edit .env files with your configuration
 # See Configuration section below for required variables
@@ -199,7 +214,6 @@ MONGODB_URI=mongodb://localhost:27017/seentics_users
 JWT_SECRET=your-secure-jwt-secret
 GOOGLE_CLIENT_ID=your-google-oauth-client-id
 GITHUB_CLIENT_ID=your-github-oauth-client-id
-# Removed: Commercial billing integration
 ```
 
 #### **Analytics Service** (`.env`)
@@ -330,6 +344,27 @@ cd frontend && npm test
 - **Jaeger**: Distributed tracing
 - **ELK Stack**: Log aggregation
 
+## 🏢 **Cloud Mode (Internal Use Only)**
+
+> **⚠️ Important**: The cloud mode features are reserved for our official hosted service at [seentics.com](https://seentics.com). These features are included in the codebase for transparency but are not intended for third-party commercial use.
+
+For developers interested in the implementation, cloud mode can be enabled with:
+
+```bash
+# Backend (.env)
+CLOUD_FEATURES_ENABLED=true
+
+# Frontend (.env.local)  
+NEXT_PUBLIC_CLOUD_FEATURES_ENABLED=true
+
+# Additional billing configuration (requires Stripe setup)
+STRIPE_PUBLISHABLE_KEY=pk_live_...
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+This adds subscription tiers, usage limits, billing pages, and team management features for our managed service.
+
 ## 🚀 **Deployment**
 
 ### **Production Deployment**
@@ -458,6 +493,3 @@ If you find this project helpful, please give it a star! ⭐
 **Built with ❤️ by the open source community**
 
 *Seentics - Making websites intelligent, one workflow at a time.*
-# Seentics-Cloud
-# Seentics-Cloud
-# Seentics-Cloud
