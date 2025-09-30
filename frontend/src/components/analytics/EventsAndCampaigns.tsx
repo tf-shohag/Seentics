@@ -111,23 +111,12 @@ interface EventsAndCampaignsProps {
 
 export function EventsAndCampaigns({ 
   customEvents, 
-  customEventsLoading = false, 
+  customEventsLoading = false,
   isDemo = false,
   className = '' 
 }: EventsAndCampaignsProps) {
   const [eventsTab, setEventsTab] = useState<string>('utm'); // Start with UTM tab
   
-  // Debug: Log what the component receives
-  console.log('🔍 EventsAndCampaigns Component Received:', {
-    customEvents,
-    customEventsLoading,
-    isDemo,
-    totalEvents: customEvents?.total_events,
-    topEvents: customEvents?.top_events,
-    timeseries: customEvents?.timeseries
-  });
-
-  // Generate demo event trend data when in demo mode
   const generateDemoEventTrendData = (): EventTrendData[] => [
     { day: 'Mon', pageViews: 1200, clicks: 450, conversions: 23 },
     { day: 'Tue', pageViews: 1350, clicks: 520, conversions: 28 },
@@ -138,7 +127,7 @@ export function EventsAndCampaigns({
     { day: 'Sun', pageViews: 1050, clicks: 410, conversions: 21 }
   ];
 
-  const eventTrendData = isDemo ? generateDemoEventTrendData() : [];
+  const eventTrendData = isDemo ? generateDemoEventTrendData() : (customEvents?.timeseries || []);
 
   // Check if we have any meaningful data
   const hasData = customEvents && (

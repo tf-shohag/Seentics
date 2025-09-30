@@ -1,23 +1,22 @@
 'use client'
 
-import React, { useEffect } from 'react'
-import { useParams, usePathname } from 'next/navigation'
-import Link from 'next/link'
-import { 
-  X,
-  LayoutDashboard,
-  Workflow, 
+import { Logo } from '@/components/ui/logo'
+import { useLayoutStore } from '@/stores/useLayoutStore'
+import {
+  BarChart3,
   ChevronDown,
+  CreditCard,
+  HelpCircle,
+  Home,
   LogOut,
   Shield,
   Target,
-  Home,
-  BarChart3,
-  CreditCard,
-  HelpCircle
+  Workflow,
+  X
 } from 'lucide-react'
-import { Logo } from '@/components/ui/logo'
-import { useLayoutStore } from '@/stores/useLayoutStore'
+import Link from 'next/link'
+import { useParams, usePathname } from 'next/navigation'
+import React, { useEffect } from 'react'
 
 
 interface NavItem {
@@ -29,64 +28,64 @@ interface NavItem {
 }
 
 export default function Sidebar() {
-  const { 
-    isSidebarOpen, 
-    isMobileMenuOpen, 
-    expandedItems, 
+  const {
+    isSidebarOpen,
+    isMobileMenuOpen,
+    expandedItems,
     toggleMobileMenu,
     toggleExpanded,
-    closeMobileMenu 
+    closeMobileMenu
   } = useLayoutStore()
   const pathname = usePathname()
   const params = useParams();
   const websiteId = params.websiteId
-  
-  
+
+
   // Generate navigation items based on context
   const getNavigationItems = () => {
     const baseItems = [
       { name: 'Dashboard', href: '', icon: Home },
-      { 
-        name: 'Analytics', 
-        href: 'analytics', 
+      {
+        name: 'Analytics',
+        href: 'analytics',
         icon: BarChart3,
       },
-      { 
-        name: 'Workflows', 
-        href: 'workflows', 
+      {
+        name: 'Workflows',
+        href: 'workflows',
         icon: Workflow,
       },
-      { 
-        name: 'Funnels', 
-        href: 'funnels', 
+      {
+        name: 'Funnels',
+        href: 'funnels',
         icon: Target,
       },
-      { 
-        name: 'Billing', 
-        href: 'billing', 
+      {
+        name: 'Billing',
+        href: 'billing',
         icon: CreditCard,
       },
-      { 
-        name: 'Support', 
-        href: 'support', 
+      {
+        name: 'Support',
+        href: 'support',
         icon: HelpCircle,
       },
 
     ];
-    
+
     // Add website-specific items
     baseItems.push(
-      { 
-        name: 'Privacy', 
-        href: 'privacy', 
+      {
+        name: 'Privacy',
+        href: 'privacy',
         icon: Shield,
       },
     );
-    
-    
+
+
     return baseItems;
   };
-  
+
   const navigationItems = getNavigationItems();
 
   // Close mobile menu when route changes
@@ -103,7 +102,7 @@ export default function Sidebar() {
     // For other items, check if pathname starts with the href (includes nested pages)
     return pathname.startsWith(fullHref)
   }
-  
+
   const getBasePath = () => {
     return `/websites/${websiteId}`
   }
@@ -126,14 +125,13 @@ export default function Sidebar() {
         <div className="flex items-center">
           <Link
             href={`${basePath}${item.href === '' ? '' : `/${item.href}`}`}
-            className={`flex items-center justify-center flex-1 px-4 py-3 text-sm font-medium transition-colors rounded-lg ${
-              active
+            className={`flex items-center justify-center flex-1 px-4 py-3 text-sm font-medium transition-colors rounded-lg ${active
                 ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-            } ${isChild ? 'ml-4 pl-7' : ''}`}
+              } ${isChild ? 'ml-4 pl-7' : ''}`}
           >
-            <item.icon 
-              className={`mr-3 h-5 w-5 ${active ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`} 
+            <item.icon
+              className={`mr-3 h-5 w-5 ${active ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}
             />
             {(isSidebarOpen || isMobileMenuOpen) && (
               <>
@@ -151,7 +149,7 @@ export default function Sidebar() {
               onClick={() => toggleExpanded(item.name)}
               className="p-1.5 ml-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-1"
             >
-              <ChevronDown 
+              <ChevronDown
                 className={`h-4 w-4 text-slate-500 dark:text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
               />
             </button>
@@ -169,9 +167,8 @@ export default function Sidebar() {
   return (
     <>
       {/* Desktop Sidebar */}
-      <div className={`${
-        isSidebarOpen ? 'w-64' : 'w-16'
-      } hidden lg:block transition-all duration-300 ease-in-out bg-white dark:bg-slate-950 shadow-sm border-r border-slate-200 dark:border-slate-700`}>
+      <div className={`${isSidebarOpen ? 'w-64' : 'w-16'
+        } hidden lg:block transition-all duration-300 ease-in-out bg-white dark:bg-slate-950 shadow-sm border-r border-slate-200 dark:border-slate-700`}>
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center h-16 px-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950">
@@ -208,7 +205,7 @@ export default function Sidebar() {
       {/* Mobile sidebar overlay */}
       {isMobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
-          <div 
+          <div
             className="fixed inset-0 bg-slate-600/80 dark:bg-slate-900/80 backdrop-blur-sm"
             onClick={toggleMobileMenu}
           />
@@ -221,7 +218,7 @@ export default function Sidebar() {
                 <X className="h-6 w-6 text-slate-700 dark:text-slate-200" />
               </button>
             </div>
-            
+
             {/* Mobile menu content */}
             <div className="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
               <div className="flex items-center flex-shrink-0 px-4">
@@ -234,7 +231,7 @@ export default function Sidebar() {
               </div>
               <nav className="mt-5 px-2 space-y-2">
                 {navigationItems.map(item => renderNavItem(item))}
-                
+
                 {/* Mobile Logout */}
                 <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
                   <button

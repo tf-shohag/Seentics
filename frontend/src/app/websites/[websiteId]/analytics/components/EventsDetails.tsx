@@ -1,9 +1,9 @@
 'use client';
 
-import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ExternalLink, MousePointerClick, FormInput, FileDown, Search, PlayCircle } from 'lucide-react';
+import { ExternalLink, FileDown, FormInput, MousePointerClick, PlayCircle, Search } from 'lucide-react';
+import React from 'react';
 
 type EventItem = {
 	event_type: string;
@@ -75,7 +75,7 @@ export const EventsDetails: React.FC<EventsDetailsProps> = ({ items }) => {
 	const copyToClipboard = async (text: string) => {
 		try {
 			await navigator.clipboard.writeText(text);
-		} catch {}
+		} catch { }
 	};
 
 	const eventMeta = (type: string) => {
@@ -150,13 +150,9 @@ export const EventsDetails: React.FC<EventsDetailsProps> = ({ items }) => {
 									<Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setExpanded(prev => ({ ...prev, [key]: !isOpen }))}>{isOpen ? 'Hide' : 'Show'} JSON</Button>
 								</div>
 							</div>
-							{isOpen ? (
+							{isOpen &&
 								<pre className="text-xs bg-muted/50 p-2 sm:p-3 rounded border border-border overflow-x-auto"><code>{pretty(filtered)}</code></pre>
-							) : (
-								<div className="text-xs text-muted-foreground">
-									{Object.keys(filtered).length > 0 ? 'Details hidden' : 'No custom properties captured'}
-								</div>
-							)}
+							}
 						</div>
 					</div>
 				);

@@ -97,19 +97,15 @@
 
   async function initFunnelTracking() {
     if (!trackFunnels || !siteId) {
-      if (DEBUG) console.log('🔍 Seentics: Funnel tracking disabled or no siteId:', { trackFunnels, siteId });
       return;
     }
 
-    if (DEBUG) console.log('🔍 Seentics: Starting funnel tracking initialization...');
     await loadFunnelDefinitions();
     startFunnelMonitoring();
-    if (DEBUG) console.log('🔍 Seentics: Funnel tracking initialization completed');
   }
 
   async function loadFunnelDefinitions() {
     try {
-      if (DEBUG) console.log('🔍 Seentics: Loading funnel definitions for site:', siteId);
 
       // Load from cache first
       const cacheKey = `${FUNNEL_STATE_KEY}_${siteId}`;
@@ -137,7 +133,6 @@
           }));
           initializeFunnels(lightweightFunnels);
           funnelsValidated = true; // Mark as validated to avoid server call
-          if (DEBUG) console.log('🔍 Seentics: Loaded cached funnels:', lightweightFunnels.length);
           return;
         } catch (error) {
           console.warn('🔍 Seentics: Error loading cached funnels:', error);

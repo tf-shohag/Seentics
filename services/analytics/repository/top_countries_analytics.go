@@ -29,7 +29,7 @@ func (tc *TopCountriesAnalytics) GetTopCountries(ctx context.Context, websiteID 
 			GROUP BY session_id
 		)
 		SELECT 
-			COALESCE(e.country, 'unknown') as country,
+			COALESCE(NULLIF(e.country, ''), 'Unknown') as country,
 			COUNT(*) as views,
 			COUNT(DISTINCT e.visitor_id) as unique_visitors,
 			COALESCE(

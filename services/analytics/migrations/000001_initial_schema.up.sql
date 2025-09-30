@@ -1,7 +1,7 @@
--- Initial schema for analytics service aligned with Go models
--- This schema matches the Event struct exactly
+-- Initial schema for analytics service
+-- Consolidated schema with all required tables and proper field sizes
 
--- Create events table matching Event model
+-- Create events table
 CREATE TABLE events (
     id UUID DEFAULT gen_random_uuid(),
     website_id VARCHAR(24) NOT NULL,
@@ -12,8 +12,10 @@ CREATE TABLE events (
     referrer TEXT,
     user_agent TEXT,
     ip_address INET,
-    country VARCHAR(2),
+    country VARCHAR(100),
     city VARCHAR(100),
+    region VARCHAR(100),
+    continent VARCHAR(100),
     browser VARCHAR(100),
     device VARCHAR(50),
     os VARCHAR(100),
@@ -97,6 +99,7 @@ CREATE INDEX idx_events_event_type ON events(event_type);
 CREATE INDEX idx_events_page ON events(page) WHERE page IS NOT NULL;
 CREATE INDEX idx_events_utm_source ON events(utm_source) WHERE utm_source IS NOT NULL;
 CREATE INDEX idx_events_utm_campaign ON events(utm_campaign) WHERE utm_campaign IS NOT NULL;
+CREATE INDEX idx_events_country ON events(country) WHERE country IS NOT NULL;
 
 CREATE INDEX idx_funnel_events_funnel_id ON funnel_events(funnel_id, created_at DESC);
 CREATE INDEX idx_funnel_events_website_id ON funnel_events(website_id);
@@ -131,7 +134,7 @@ SELECT add_compression_policy('events', INTERVAL '7 days', if_not_exists => TRUE
 SELECT add_compression_policy('funnel_events', INTERVAL '7 days', if_not_exists => TRUE);
 SELECT add_compression_policy('custom_events_aggregated', INTERVAL '7 days', if_not_exists => TRUE);
 
--- Add retention policies (keep data for 1 year - standardized retention period)
+-- Add retention policies (keep data for 1 year)
 SELECT add_retention_policy('events', INTERVAL '1 year', if_not_exists => TRUE);
 SELECT add_retention_policy('funnel_events', INTERVAL '1 year', if_not_exists => TRUE);
 SELECT add_retention_policy('custom_events_aggregated', INTERVAL '1 year', if_not_exists => TRUE);

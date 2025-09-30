@@ -27,7 +27,7 @@ import { Suspense, useEffect } from 'react'
 import { SiteSelector } from './site-selector'
 
 function HeaderContent() {
-  const { 
+  const {
     isSidebarOpen,
     toggleSidebar,
     toggleMobileMenu
@@ -40,18 +40,7 @@ function HeaderContent() {
   const { user, logout } = useAuth()
   const { toast } = useToast()
 
-  // Debug: Log user object structure to see what's available
-  if (user) {
-    console.log('User object in header:', {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      avatar: user.avatar,
-      hasAvatar: !!user.avatar,
-      avatarType: typeof user.avatar
-    })
-  }
-  
+
   // Get siteId from either URL params or search params
   const urlSiteId = params?.websiteId as string
   const searchSiteId = searchParams.get('siteId')
@@ -107,7 +96,7 @@ function HeaderContent() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          
+
           {/* Desktop Sidebar Toggle */}
           <button
             onClick={toggleSidebar}
@@ -129,9 +118,9 @@ function HeaderContent() {
 
           {/* Site Selector */}
           <div className="hidden md:block">
-            <SiteSelector 
-              selectedSiteId={siteId} 
-              onSiteChange={handleSiteChange} 
+            <SiteSelector
+              selectedSiteId={siteId}
+              onSiteChange={handleSiteChange}
             />
           </div>
         </div>
@@ -194,7 +183,7 @@ function HeaderContent() {
                   </Button>
                 </Link>
                 <Separator />
-                
+
                 {/* Admin Link - Only show for admin users */}
                 {(user?.email === 'admin@seentics.com' || user?.email === 'shohag@seentics.com') && (
                   <>

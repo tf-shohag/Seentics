@@ -389,11 +389,11 @@ func (s *EventService) enrichEventData(ctx context.Context, event *models.Event)
 
 		location := utils.GetLocationFromIP(*event.IPAddress)
 		
-		// Set country information - use CountryCode for the country field (VARCHAR(2))
+		// Set country information - use full country name for the country field
 		if event.Country == nil || *event.Country == "" {
-			// Use country code for the country field since it's limited to 2 characters
-			if location.CountryCode != "" {
-				event.Country = &location.CountryCode
+			// Use full country name for the country field
+			if location.Country != "" {
+				event.Country = &location.Country
 			}
 		}
 		if event.CountryCode == nil || *event.CountryCode == "" {

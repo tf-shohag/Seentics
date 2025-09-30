@@ -12,7 +12,7 @@
           (win.SEENTICS_CONFIG?.devApiHost || 'http://localhost:8080') :
           'https://api.seentics.com');
       const API_ENDPOINT = `${apiHost}/api/v1/analytics/event/batch`;
-      const DEBUG = !!(win.SEENTICS_CONFIG?.debugMode) && loc.hostname === 'localhost';
+      const DEBUG = !!(win.SEENTICS_CONFIG?.debugMode || loc.search.includes('debug=true')) && loc.hostname === 'localhost';
 
       // Constants
       const VISITOR_ID_KEY = 'seentics_visitor_id';
@@ -31,7 +31,6 @@
       let pageviewSent = false;
       let currentUrl = loc.pathname;
       let cachedUTMParams = null;
-      let lastUrlForUTM = '';
       let activityTimeout = null;
       let isDestroyed = false;
 
@@ -145,20 +144,21 @@
       }
 
       async function flushEventQueue() {
-        if (isDestroyed || eventQueue.length === 0) return;
-
         const events = eventQueue.splice(0);
         flushTimeout = null;
 
         try {
-          const batchData = {
-            siteId,
-            domain: getCurrentDomain(),
-            events
+          const payload = {
+            siteId: siteId,
+            domain: loc.hostname,
+            events: events
           };
 
+
+          const batchData = JSON.stringify(payload);
+
           if (nav.sendBeacon) {
-            const blob = new Blob([JSON.stringify(batchData)], { type: 'application/json' });
+            const blob = new Blob([batchData], { type: 'application/json' });
             nav.sendBeacon(API_ENDPOINT, blob);
           } else {
             await deduplicatedFetch(API_ENDPOINT, {
@@ -247,6 +247,14 @@
         event.device = deviceData.device;
         event.os = deviceData.os;
 
+        // Include UTM parameters for custom events too
+        const utmParams = extractUTMParameters();
+        Object.keys(utmParams).forEach(key => {
+          if (utmParams[key]) {
+            event[key] = utmParams[key];
+          }
+        });
+
         queueEvent(event);
 
         // Emit for funnel tracker
@@ -259,28 +267,34 @@
 
       // --- Pageview Tracking ---
 
-      // Optimized UTM parameter extraction with better caching
-      let urlParamsCache = null;
+      // UTM parameter extraction with session-level persistence
+      let sessionUTMParams = null; // Session-level UTM storage
 
       function extractUTMParameters() {
-        const currentUrl = loc.search;
-        if (currentUrl === lastUrlForUTM && cachedUTMParams) {
-          return cachedUTMParams;
-        }
-
-        // Reuse URLSearchParams object if URL hasn't changed
-        if (!urlParamsCache || currentUrl !== lastUrlForUTM) {
-          urlParamsCache = new URLSearchParams(currentUrl);
-        }
-
-        cachedUTMParams = {
-          utm_source: urlParamsCache.get('utm_source'),
-          utm_medium: urlParamsCache.get('utm_medium'),
-          utm_campaign: urlParamsCache.get('utm_campaign'),
-          utm_term: urlParamsCache.get('utm_term'),
-          utm_content: urlParamsCache.get('utm_content')
+        // Always extract UTM parameters from the current URL
+        const currentSearch = loc.search;
+        const urlParams = new URLSearchParams(currentSearch);
+        
+        const utmParams = {
+          utm_source: urlParams.get('utm_source'),
+          utm_medium: urlParams.get('utm_medium'),
+          utm_campaign: urlParams.get('utm_campaign'),
+          utm_term: urlParams.get('utm_term'),
+          utm_content: urlParams.get('utm_content')
         };
-        lastUrlForUTM = currentUrl;
+
+        // If we found UTM params in current URL, store them for the session
+        const hasUTMParams = Object.values(utmParams).some(value => value !== null);
+        if (hasUTMParams) {
+          sessionUTMParams = { ...utmParams };
+          cachedUTMParams = { ...utmParams };
+        } else if (sessionUTMParams) {
+          // Use session UTM params if current URL has none
+          cachedUTMParams = { ...sessionUTMParams };
+        } else {
+          // No UTM params anywhere
+          cachedUTMParams = utmParams;
+        }
 
         return cachedUTMParams;
       }
@@ -347,7 +361,6 @@
         if (newUrl === currentUrl) return;
 
         currentUrl = newUrl;
-        cachedUTMParams = null;
         pageStartTime = performance.now();
         pageviewSent = false;
 
@@ -522,7 +535,9 @@
           ...(DEBUG && {
             getVisitorId: () => visitorId,
             getSessionId: () => sessionId,
-            flushEvents: flushEventQueue
+            flushEvents: flushEventQueue,
+            getUTMParams: () => sessionUTMParams || cachedUTMParams,
+            getCurrentURL: () => loc.href
           })
         };
       }

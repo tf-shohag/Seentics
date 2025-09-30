@@ -5,7 +5,6 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Image from 'next/image';
 import { useState } from 'react';
 import { TopBrowsersChart } from './TopBrowsersChart';
-import TopCountriesChart from './TopCountriesChart';
 import TopDevicesChart from './TopDevicesChart';
 
 
@@ -81,7 +80,7 @@ export function AudienceInsights({
   onViewMore,
   className = ''
 }: AudienceInsightsProps) {
-  const [audienceTab, setAudienceTab] = useState<string>('countries');
+  const [audienceTab, setAudienceTab] = useState<string>('browsers');
 
   // Helper function to get appropriate image for browser
   const getBrowserImage = (browser: string) => {
@@ -128,8 +127,7 @@ export function AudienceInsights({
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Geographic, device, and browser breakdown</p>
         </div>
         <Tabs value={audienceTab} onValueChange={setAudienceTab} className="w-full sm:w-auto flex-shrink-0">
-          <TabsList className="grid w-full grid-cols-4 h-9 sm:h-8 gap-1">
-            <TabsTrigger value="countries" className="text-xs px-1 sm:px-2 md:px-3 truncate">Countries</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 h-9 sm:h-8 gap-1">
             <TabsTrigger value="browsers" className="text-xs px-1 sm:px-2 md:px-3 truncate">Browsers</TabsTrigger>
             <TabsTrigger value="devices" className="text-xs px-1 sm:px-2 md:px-3 truncate">Devices</TabsTrigger>
             <TabsTrigger value="os" className="text-xs px-1 sm:px-2 md:px-3 truncate">OS</TabsTrigger>
@@ -138,13 +136,6 @@ export function AudienceInsights({
       </CardHeader>
       <CardContent className="">
         <div className="mt-0 max-h-[32rem] overflow-y-auto">
-          {audienceTab === 'countries' && (
-            <TopCountriesChart
-              data={topCountries}
-              isLoading={countriesLoading}
-              onViewMore={() => onViewMore?.('countries')}
-            />
-          )}
           {audienceTab === 'browsers' && (
             <TopBrowsersChart
               data={topBrowsers}

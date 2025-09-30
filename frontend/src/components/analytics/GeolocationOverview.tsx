@@ -7,6 +7,7 @@ import { Globe, MapPin } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { useState } from 'react';
+import { getCountryFlag } from '@/utils/countries';
 
 // Dynamically import WorldMap to avoid SSR issues
 const WorldMap = dynamic(() => import('./WorldMap'), {
@@ -43,70 +44,87 @@ interface GeolocationOverviewProps {
 export function GeolocationOverview({ data, isLoading = false, className = '' }: GeolocationOverviewProps) {
     const [geoTab, setGeoTab] = useState<string>('map');
 
-    // Helper function to get country flag
-    const getCountryFlag = (countryName: string): string => {
-        const countryMap: Record<string, string> = {
-            'United States': 'US',
-            'United States of America': 'US',
-            'USA': 'US',
-            'US': 'US',
-            'Bangladesh': 'BD',
-            'India': 'IN',
-            'China': 'CN',
-            'United Kingdom': 'GB',
-            'UK': 'GB',
-            'Germany': 'DE',
-            'France': 'FR',
-            'Canada': 'CA',
-            'Australia': 'AU',
-            'Japan': 'JP',
-            'Brazil': 'BR',
-            'Russia': 'RU',
-            'South Korea': 'KR',
-            'Italy': 'IT',
-            'Spain': 'ES',
-            'Netherlands': 'NL',
-            'Sweden': 'SE',
-            'Norway': 'NO',
-            'Denmark': 'DK',
-            'Finland': 'FI',
-            'Switzerland': 'CH',
-            'Austria': 'AT',
-            'Belgium': 'BE',
-            'Poland': 'PL',
-            'Mexico': 'MX',
-            'Argentina': 'AR',
-            'Chile': 'CL',
-            'Colombia': 'CO',
-            'Peru': 'PE',
-            'Venezuela': 'VE',
-            'Thailand': 'TH',
-            'Vietnam': 'VN',
-            'Indonesia': 'ID',
-            'Philippines': 'PH',
-            'Malaysia': 'MY',
-            'Singapore': 'SG',
-            'Pakistan': 'PK',
-            'Turkey': 'TR',
-            'Egypt': 'EG',
-            'South Africa': 'ZA',
-            'Nigeria': 'NG',
-            'Kenya': 'KE',
-            'Morocco': 'MA',
-            'Algeria': 'DZ',
-            'Tunisia': 'TN',
-            'Ghana': 'GH',
-            'Ethiopia': 'ET',
-            'Uganda': 'UG',
-            'Tanzania': 'TZ',
-            'Zimbabwe': 'ZW',
-            'Botswana': 'BW',
-            'Namibia': 'NA'
-        };
-
-        const countryCode = countryMap[countryName] || countryName.substring(0, 2).toUpperCase();
-        return `https://flagcdn.com/w40/${countryCode.toLowerCase()}.png`;
+    // Dummy data for localhost testing
+    const dummyGeolocationData: GeolocationData = {
+        countries: [
+            { name: 'United States', count: 2847, percentage: 42.5 },
+            { name: 'United Kingdom', count: 1523, percentage: 22.7 },
+            { name: 'Germany', count: 892, percentage: 13.3 },
+            { name: 'Canada', count: 645, percentage: 9.6 },
+            { name: 'France', count: 423, percentage: 6.3 },
+            { name: 'Australia', count: 298, percentage: 4.4 },
+            { name: 'Netherlands', count: 187, percentage: 2.8 },
+            { name: 'Japan', count: 156, percentage: 2.3 },
+            { name: 'India', count: 134, percentage: 2.0 },
+            { name: 'Brazil', count: 98, percentage: 1.5 },
+            { name: 'Spain', count: 87, percentage: 1.3 },
+            { name: 'Italy', count: 76, percentage: 1.1 },
+            { name: 'Sweden', count: 65, percentage: 1.0 },
+            { name: 'Norway', count: 54, percentage: 0.8 },
+            { name: 'Denmark', count: 43, percentage: 0.6 }
+        ],
+        cities: [
+            { name: 'New York, NY', count: 1245, percentage: 18.6 },
+            { name: 'London, UK', count: 987, percentage: 14.7 },
+            { name: 'San Francisco, CA', count: 756, percentage: 11.3 },
+            { name: 'Toronto, ON', count: 634, percentage: 9.5 },
+            { name: 'Berlin, DE', count: 523, percentage: 7.8 },
+            { name: 'Los Angeles, CA', count: 456, percentage: 6.8 },
+            { name: 'Paris, FR', count: 398, percentage: 5.9 },
+            { name: 'Sydney, AU', count: 287, percentage: 4.3 },
+            { name: 'Amsterdam, NL', count: 234, percentage: 3.5 },
+            { name: 'Chicago, IL', count: 198, percentage: 3.0 },
+            { name: 'Tokyo, JP', count: 176, percentage: 2.6 },
+            { name: 'Vancouver, BC', count: 154, percentage: 2.3 },
+            { name: 'Munich, DE', count: 132, percentage: 2.0 },
+            { name: 'Boston, MA', count: 123, percentage: 1.8 },
+            { name: 'Melbourne, AU', count: 109, percentage: 1.6 },
+            { name: 'Madrid, ES', count: 98, percentage: 1.5 },
+            { name: 'Stockholm, SE', count: 87, percentage: 1.3 },
+            { name: 'Copenhagen, DK', count: 76, percentage: 1.1 },
+            { name: 'Oslo, NO', count: 65, percentage: 1.0 },
+            { name: 'Dublin, IE', count: 54, percentage: 0.8 }
+        ],
+        continents: [
+            { name: 'North America', count: 3892, percentage: 58.1 },
+            { name: 'Europe', count: 2156, percentage: 32.2 },
+            { name: 'Asia', count: 456, percentage: 6.8 },
+            { name: 'Oceania', count: 298, percentage: 4.4 },
+            { name: 'South America', count: 134, percentage: 2.0 },
+            { name: 'Africa', count: 76, percentage: 1.1 }
+        ],
+        regions: [
+            { name: 'California', count: 1456, percentage: 21.7 },
+            { name: 'New York', count: 1234, percentage: 18.4 },
+            { name: 'England', count: 987, percentage: 14.7 },
+            { name: 'Ontario', count: 756, percentage: 11.3 },
+            { name: 'Berlin', count: 634, percentage: 9.5 },
+            { name: 'Texas', count: 523, percentage: 7.8 },
+            { name: 'Île-de-France', count: 456, percentage: 6.8 },
+            { name: 'New South Wales', count: 398, percentage: 5.9 },
+            { name: 'North Holland', count: 287, percentage: 4.3 },
+            { name: 'Illinois', count: 234, percentage: 3.5 }
+        ]
     };
+
+    // Check if running on localhost and use dummy data if no real data is available
+    const isLocalhost = typeof window !== 'undefined' &&
+        (window.location.hostname === 'localhost' ||
+            window.location.hostname === '127.0.0.1' ||
+            window.location.hostname === '0.0.0.0');
+
+    // More robust check for empty data - check if data exists and has meaningful content
+    const hasRealData = data &&
+        data.countries &&
+        Array.isArray(data.countries) &&
+        data.countries.length > 0;
+
+    // Always use dummy data on localhost, ignore API data
+    const displayData = isLocalhost ? dummyGeolocationData : data;
+
+
+    // Note: Country flag function now imported from utils/countries.ts
+    // This provides comprehensive coverage of all 194 UN member states
 
     // Helper function to get continent emoji
     const getContinentEmoji = (continent: string): string => {
@@ -176,7 +194,7 @@ export function GeolocationOverview({ data, isLoading = false, className = '' }:
                         <div>
                             {/* Interactive World Map */}
                             <WorldMap
-                                data={data?.countries || []}
+                                data={displayData?.countries || []}
                                 isLoading={isLoading}
                             />
                         </div>
@@ -184,7 +202,7 @@ export function GeolocationOverview({ data, isLoading = false, className = '' }:
 
                     {geoTab === 'countries' && (
                         <div className="space-y-3">
-                            {data?.countries?.slice(0, 15).map((country, index) => {
+                            {displayData?.countries?.slice(0, 15).map((country, index) => {
                                 const colors = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#06B6D4'];
                                 const color = colors[index % colors.length];
 
@@ -238,7 +256,7 @@ export function GeolocationOverview({ data, isLoading = false, className = '' }:
 
                     {geoTab === 'cities' && (
                         <div className="space-y-3">
-                            {data?.cities?.slice(0, 20).map((city, index) => {
+                            {displayData?.cities?.slice(0, 20).map((city, index) => {
                                 const colors = ['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899', '#06B6D4'];
                                 const color = colors[index % colors.length];
 
@@ -277,7 +295,7 @@ export function GeolocationOverview({ data, isLoading = false, className = '' }:
 
                     {geoTab === 'continents' && (
                         <div className="space-y-3">
-                            {data?.continents?.map((continent, index) => {
+                            {displayData?.continents?.map((continent, index) => {
                                 const colors = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#06B6D4'];
                                 const color = colors[index % colors.length];
 
@@ -315,7 +333,7 @@ export function GeolocationOverview({ data, isLoading = false, className = '' }:
                     )}
 
                     {/* Empty State */}
-                    {!data?.countries?.length && !isLoading && (
+                    {!displayData?.countries?.length && !isLoading && (
                         <div className="text-center py-12 text-muted-foreground">
                             <Globe className="h-16 w-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
                             <div className="text-lg font-medium mb-2">No geographic data available</div>

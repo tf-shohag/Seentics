@@ -1,6 +1,27 @@
--- Drop all tables and extensions
-DROP TABLE IF EXISTS privacy_requests CASCADE;
-DROP TABLE IF EXISTS custom_events_aggregated CASCADE;
-DROP TABLE IF EXISTS funnels CASCADE;
-DROP TABLE IF EXISTS funnel_events CASCADE;
-DROP TABLE IF EXISTS events CASCADE;
+-- Drop all tables and indexes created in the initial schema
+
+-- Drop indexes first
+DROP INDEX IF EXISTS idx_events_website_timestamp;
+DROP INDEX IF EXISTS idx_events_visitor_id;
+DROP INDEX IF EXISTS idx_events_session_id;
+DROP INDEX IF EXISTS idx_events_event_type;
+DROP INDEX IF EXISTS idx_events_page;
+DROP INDEX IF EXISTS idx_events_utm_source;
+DROP INDEX IF EXISTS idx_events_utm_campaign;
+DROP INDEX IF EXISTS idx_events_country;
+
+DROP INDEX IF EXISTS idx_funnel_events_funnel_id;
+DROP INDEX IF EXISTS idx_funnel_events_website_id;
+DROP INDEX IF EXISTS idx_funnel_events_visitor_id;
+
+DROP INDEX IF EXISTS idx_funnels_website_id;
+DROP INDEX IF EXISTS idx_custom_events_aggregated_website_signature;
+DROP INDEX IF EXISTS idx_custom_events_last_seen;
+DROP INDEX IF EXISTS idx_privacy_requests_website_id;
+
+-- Drop tables
+DROP TABLE IF EXISTS privacy_requests;
+DROP TABLE IF EXISTS custom_events_aggregated;
+DROP TABLE IF EXISTS funnels;
+DROP TABLE IF EXISTS funnel_events;
+DROP TABLE IF EXISTS events;

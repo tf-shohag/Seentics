@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -53,16 +52,17 @@ func (r *CustomEventsAggregatedRepository) UpsertCustomEvent(ctx context.Context
 	checkQuery := `
 		SELECT id, count, first_seen FROM custom_events_aggregated 
 		WHERE website_id = $1 AND event_signature = $2 
-		AND last_seen >= $3 - INTERVAL '1 hour'
+		AND last_seen >= $3
 		ORDER BY last_seen DESC LIMIT 1
 	`
 	
 	now := time.Now()
+	oneHourAgo := now.Add(-time.Hour)
 	var existingID string
 	var existingCount int
 	var firstSeen time.Time
 	
-	err := r.db.QueryRow(ctx, checkQuery, event.WebsiteID, signature, now).Scan(&existingID, &existingCount, &firstSeen)
+	err := r.db.QueryRow(ctx, checkQuery, event.WebsiteID, signature, oneHourAgo).Scan(&existingID, &existingCount, &firstSeen)
 	
 	var query string
 	var args []interface{}
@@ -172,48 +172,15 @@ func (r *CustomEventsAggregatedRepository) GetCustomEventStats(ctx context.Conte
 	return events, rows.Err()
 }
 
-// createEventSignature creates a unique signature for an event based on its type and properties
+// createEventSignature creates a unique signature for an event based on its type only
+// This ensures proper aggregation of events of the same type regardless of property variations
 func (r *CustomEventsAggregatedRepository) createEventSignature(eventType string, properties models.Properties) string {
-	// Keys to ignore to reduce cardinality noise
-	ignoreKeys := map[string]bool{
-		"element_class": true,
-		"class":         true,
-		"style":         true,
-		"xpath":         true,
-		"data-testid":   true,
-	}
-
-	// Create a deterministic signature from event type and key properties
-	signatureData := []string{strings.ToLower(eventType)}
-
-	if properties != nil {
-		// Sort keys for consistent hashing
-		var keys []string
-		for key := range properties {
-			if ignoreKeys[strings.ToLower(key)] {
-				continue
-			}
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-
-		// Add key-value pairs to signature
-		for _, key := range keys {
-			value := properties[key]
-			if value == nil {
-				continue
-			}
-			valStr := fmt.Sprintf("%v", value)
-			valStr = strings.TrimSpace(valStr)
-			if len(valStr) > 64 {
-				valStr = valStr[:64]
-			}
-			signatureData = append(signatureData, fmt.Sprintf("%s:%s", strings.ToLower(key), valStr))
-		}
-	}
-
-	// Create hash of the signature data
-	hash := sha256.Sum256([]byte(strings.Join(signatureData, "|")))
+	// Use only event type for signature to enable proper aggregation
+	// Properties are stored separately as sample_properties for analysis
+	signatureData := strings.ToLower(eventType)
+	
+	// Create hash of the event type only
+	hash := sha256.Sum256([]byte(signatureData))
 	return hex.EncodeToString(hash[:])
 }
 

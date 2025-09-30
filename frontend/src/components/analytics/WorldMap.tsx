@@ -1,11 +1,24 @@
 'use client';
 
-import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps';
+import { MouseEvent, useState } from 'react';
+import { ComposableMap, Geographies, Geography } from 'react-simple-maps';
+import { getCountryCoordinates, getCountryCode, getStandardCountryName } from '@/utils/countries';
 
 interface CountryData {
     name: string;
     count: number;
     percentage: number;
+}
+
+interface GeographyProperties {
+    name: string;
+    [key: string]: any;
+}
+
+interface GeographyObject {
+    rsmKey: string;
+    properties: GeographyProperties;
+    [key: string]: any;
 }
 
 interface WorldMapProps {
@@ -14,42 +27,30 @@ interface WorldMapProps {
     className?: string;
 }
 
-// Country coordinates for markers
-const countryCoordinates: Record<string, [number, number]> = {
-    'United States': [-95.7129, 37.0902],
-    'United Kingdom': [-3.4360, 55.3781],
-    'Germany': [10.4515, 51.1657],
-    'Canada': [-106.3468, 56.1304],
-    'France': [2.2137, 46.2276],
-    'Australia': [133.7751, -25.2744],
-    'Japan': [138.2529, 36.2048],
-    'Netherlands': [5.2913, 52.1326],
-    'India': [78.9629, 20.5937],
-    'Brazil': [-51.9253, -14.2350],
-    'Spain': [-3.7492, 40.4637],
-    'Italy': [12.5674, 41.8719]
-};
-
-// Country ISO codes for geography matching
-const countryIsoCodes: Record<string, string> = {
-    'United States': 'US',
-    'United Kingdom': 'GB',
-    'Germany': 'DE',
-    'Canada': 'CA',
-    'France': 'FR',
-    'Australia': 'AU',
-    'Japan': 'JP',
-    'Netherlands': 'NL',
-    'India': 'IN',
-    'Brazil': 'BR',
-    'Spain': 'ES',
-    'Italy': 'IT'
-};
+// Note: Country data now imported from utils/countries.ts
+// This provides comprehensive coverage of all 194 UN member states
 
 
 
 
 export default function WorldMap({ data = [], isLoading = false, className = '' }: WorldMapProps) {
+    const [tooltip, setTooltip] = useState<{
+        show: boolean;
+        x: number;
+        y: number;
+        content: {
+            name: string;
+            count?: number;
+            percentage?: number;
+        };
+    }>({
+        show: false,
+        x: 0,
+        y: 0,
+        content: { name: '' }
+    });
+
+
     if (isLoading) {
         return (
             <div className={`h-[32rem] bg-gradient-to-br from-blue-50 to-green-50 dark:from-blue-950/20 dark:to-green-950/20 rounded-lg flex items-center justify-center ${className}`}>
@@ -77,6 +78,7 @@ export default function WorldMap({ data = [], isLoading = false, className = '' 
     // Get color based on visitor count
     const getCountryColor = (countryName: string): string => {
         const country = data.find(d => d.name === countryName);
+
         if (!country) return '#E5E7EB'; // Gray for no data
 
         const maxCount = Math.max(...data.map(d => d.count));
@@ -121,11 +123,15 @@ export default function WorldMap({ data = [], isLoading = false, className = '' 
                     style={{ width: '100%', height: '100%' }}
                 >
                     <Geographies geography="https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json">
-                        {({ geographies }) =>
-                            geographies.map((geo) => {
-                                const countryName = Object.keys(countryIsoCodes).find(
-                                    name => countryIsoCodes[name] === geo.properties.ISO_A2
-                                );
+                        {({ geographies }: { geographies: GeographyObject[] }) => {
+                            return geographies.map((geo: GeographyObject) => {
+                                // Map geography names using the comprehensive utils mapping
+                                const geoName = geo.properties.name;
+                                const countryName = getStandardCountryName(geoName);
+
+
+                                const countryData = data.find(d => d.name === countryName);
+                                const hasData = !!countryData;
 
                                 return (
                                     <Geography
@@ -139,40 +145,43 @@ export default function WorldMap({ data = [], isLoading = false, className = '' 
                                                 outline: 'none',
                                             },
                                             hover: {
-                                                fill: '#F59E0B',
+                                                fill: hasData ? '#F59E0B' : '#E5E7EB',
                                                 outline: 'none',
-                                                cursor: 'pointer'
+                                                cursor: hasData ? 'pointer' : 'default'
                                             },
                                             pressed: {
                                                 outline: 'none',
                                             },
                                         }}
+                                        onMouseEnter={(event: MouseEvent<SVGPathElement>) => {
+                                            setTooltip({
+                                                show: true,
+                                                x: event.clientX + 15,
+                                                y: event.clientY - 60,
+                                                content: {
+                                                    name: countryName || geo.properties.name || 'Unknown Country',
+                                                    count: countryData?.count,
+                                                    percentage: countryData?.percentage
+                                                }
+                                            });
+                                        }}
+                                        onMouseMove={(event: MouseEvent<SVGPathElement>) => {
+                                            setTooltip(prev => ({
+                                                ...prev,
+                                                x: event.clientX + 15,
+                                                y: event.clientY - 60
+                                            }));
+                                        }}
+                                        onMouseLeave={() => {
+                                            setTooltip(prev => ({ ...prev, show: false }));
+                                        }}
                                     />
                                 );
-                            })
-                        }
+                            });
+                        }}
                     </Geographies>
 
-                    {/* Markers for countries with data */}
-                    {data
-                        .filter(country => countryCoordinates[country.name])
-                        .map((country) => (
-                            <Marker
-                                key={country.name}
-                                coordinates={countryCoordinates[country.name]}
-                            >
-                                <circle
-                                    r={getMarkerSize(country.count)}
-                                    fill={getCountryColor(country.name)}
-                                    stroke="#FFFFFF"
-                                    strokeWidth={2}
-                                    style={{ cursor: 'pointer' }}
-                                />
-                                <title>
-                                    {country.name}: {country.count.toLocaleString()} visitors ({country.percentage.toFixed(1)}%)
-                                </title>
-                            </Marker>
-                        ))}
+                    {/* Removed circle markers - using country coloring instead */}
                 </ComposableMap>
             </div>
 
@@ -212,6 +221,40 @@ export default function WorldMap({ data = [], isLoading = false, className = '' 
                     </div>
                 </div>
             </div>
+
+            {/* Custom Tooltip */}
+            {tooltip.show && (
+                <div
+                    className="fixed z-50 pointer-events-none"
+                    style={{
+                        left: tooltip.x,
+                        top: tooltip.y,
+                    }}
+                >
+                    <div className="bg-gray-900 dark:bg-gray-800 text-white px-3 py-2 rounded-lg shadow-xl border border-gray-700 max-w-xs">
+                        <div className="font-semibold text-sm mb-1">{tooltip.content.name}</div>
+                        {tooltip.content.count !== undefined && (
+                            <div className="space-y-1">
+                                <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-300">Visitors:</span>
+                                    <span className="font-medium text-blue-300">{tooltip.content.count.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-300">Share:</span>
+                                    <span className="font-medium text-green-300">{tooltip.content.percentage?.toFixed(1)}%</span>
+                                </div>
+                            </div>
+                        )}
+                        {tooltip.content.count === undefined && (
+                            <div className="text-xs text-gray-400">No visitor data</div>
+                        )}
+                        {/* Tooltip arrow */}
+                        <div className="absolute top-full left-1/2 transform -translate-x-1/2">
+                            <div className="border-4 border-transparent border-t-gray-900 dark:border-t-gray-800"></div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
