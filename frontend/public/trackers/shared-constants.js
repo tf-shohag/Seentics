@@ -1,7 +1,7 @@
 // --- Seentics Shared Constants ---
 // Shared constants and utilities between main tracker and workflow tracker
 
-(function() {
+(function () {
   'use strict';
 
   // --- Shared Storage Keys ---
@@ -133,8 +133,8 @@
     getApiHost: () => {
       const config = window.SEENTICS_CONFIG;
       if (config?.apiHost) return config.apiHost;
-      return window.location.hostname === 'localhost' ? 
-        (config?.devApiHost || 'http://localhost:8080') : 
+      return window.location.hostname === 'localhost' ?
+        (config?.devApiHost || 'http://localhost:8080') :
         'https://api.seentics.com';
     }
   };

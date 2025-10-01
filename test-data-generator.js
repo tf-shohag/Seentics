@@ -13,7 +13,7 @@ const http = require('http');
 // Configuration
 const CONFIG = {
     API_HOST: 'http://localhost:8080',
-    SITE_ID: '68dc19aae1ace15556661eb2', // Your website ID
+    SITE_ID: '68dcee11f2bb1aed5ecf502b', // Your website ID
     BATCH_SIZE: 10,
     DELAY_BETWEEN_BATCHES: 1000, // 1 second
     TOTAL_EVENTS: 500, // Increased for better charts
@@ -25,14 +25,14 @@ const CONFIG = {
 // Sample data pools
 const SAMPLE_DATA = {
     pages: [
-        '/68dc19aae1ace15556661eb2/analytics',
-        '/68dc19aae1ace15556661eb2/dashboard',
-        '/68dc19aae1ace15556661eb2/settings',
-        '/68dc19aae1ace15556661eb2/funnels',
-        '/68dc19aae1ace15556661eb2/workflows',
-        '/68dc19aae1ace15556661eb2/billing',
-        '/68dc19aae1ace15556661eb2/support',
-        '/68dc19aae1ace15556661eb2/privacy'
+        '/68dcee11f2bb1aed5ecf502b/analytics',
+        '/68dcee11f2bb1aed5ecf502b/dashboard',
+        '/68dcee11f2bb1aed5ecf502b/settings',
+        '/68dcee11f2bb1aed5ecf502b/funnels',
+        '/68dcee11f2bb1aed5ecf502b/workflows',
+        '/68dcee11f2bb1aed5ecf502b/billing',
+        '/68dcee11f2bb1aed5ecf502b/support',
+        '/68dcee11f2bb1aed5ecf502b/privacy'
     ],
 
     referrers: [

@@ -10,6 +10,7 @@ import (
 
 	"analytics-app/utils"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 )
 
@@ -21,6 +22,7 @@ const (
 
 type EventService struct {
 	repo   *repository.EventRepository
+	db     *pgxpool.Pool
 	logger zerolog.Logger
 
 	// Simple event channel for async processing
@@ -35,11 +37,12 @@ type EventService struct {
 	shutdownMu sync.RWMutex
 }
 
-func NewEventService(repo *repository.EventRepository, logger zerolog.Logger) *EventService {
+func NewEventService(repo *repository.EventRepository, db *pgxpool.Pool, logger zerolog.Logger) *EventService {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	service := &EventService{
 		repo:      repo,
+		db:        db,
 		logger:    logger,
 		eventChan: make(chan models.Event, 1000), // Buffered channel
 		batchChan: make(chan []models.Event, 100),
@@ -52,6 +55,49 @@ func NewEventService(repo *repository.EventRepository, logger zerolog.Logger) *E
 	service.startBatchProcessor()
 
 	return service
+}
+
+// ensurePartitionExists checks if a partition exists for the given date and creates it if needed
+func (s *EventService) ensurePartitionExists(ctx context.Context, targetDate time.Time) error {
+	// Calculate partition boundaries (monthly partitions)
+	startOfMonth := time.Date(targetDate.Year(), targetDate.Month(), 1, 0, 0, 0, 0, time.UTC)
+	endOfMonth := startOfMonth.AddDate(0, 1, 0)
+	
+	partitionName := fmt.Sprintf("events_y%dm%02d", startOfMonth.Year(), startOfMonth.Month())
+	startDate := startOfMonth.Format("2006-01-02")
+	endDate := endOfMonth.Format("2006-01-02")
+	
+	// Check if partition already exists
+	var exists bool
+	checkQuery := `
+		SELECT EXISTS (
+			SELECT 1 FROM pg_tables 
+			WHERE tablename = $1 AND schemaname = 'public'
+		)
+	`
+	err := s.db.QueryRow(ctx, checkQuery, partitionName).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check if partition exists: %w", err)
+	}
+	
+	if !exists {
+		// Create the partition
+		createQuery := fmt.Sprintf(
+			"CREATE TABLE IF NOT EXISTS %s PARTITION OF events FOR VALUES FROM ('%s') TO ('%s')",
+			partitionName, startDate, endDate,
+		)
+		_, err := s.db.Exec(ctx, createQuery)
+		if err != nil {
+			return fmt.Errorf("failed to create partition %s: %w", partitionName, err)
+		}
+		s.logger.Info().
+			Str("partition_name", partitionName).
+			Str("start_date", startDate).
+			Str("end_date", endDate).
+			Msg("Created new partition")
+	}
+	
+	return nil
 }
 
 func (s *EventService) TrackEvent(ctx context.Context, event *models.Event) (*models.EventResponse, error) {
@@ -265,6 +311,25 @@ func (s *EventService) processBatch(batch []models.Event) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	// Ensure partitions exist for all events in the batch
+	uniqueDates := make(map[string]time.Time)
+	for _, event := range batch {
+		if !event.Timestamp.IsZero() {
+			dateKey := event.Timestamp.Format("2006-01")
+			uniqueDates[dateKey] = event.Timestamp
+		}
+	}
+
+	// Create partitions for unique months
+	for _, eventTime := range uniqueDates {
+		if err := s.ensurePartitionExists(ctx, eventTime); err != nil {
+			s.logger.Warn().
+				Err(err).
+				Time("event_time", eventTime).
+				Msg("Failed to ensure partition exists, continuing anyway")
+		}
+	}
 
 	// Log event types and website IDs in the batch
 	eventTypes := make(map[string]int)

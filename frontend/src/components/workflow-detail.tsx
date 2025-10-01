@@ -216,10 +216,10 @@ export function WorkflowDetail({
   };
 
   // Use aggregated analytics data or fallback to workflow properties for demo
-  const overallTriggers = isDemo ? (workflow.totalTriggers || 0) : (workflowStats?.totalTriggers || 0);
-  const overallCompletions = isDemo ? (workflow.totalCompletions || 0) : (workflowStats?.totalCompletions || 0);
-  const overallRuns = isDemo ? (workflow.totalTriggers || 0) : (workflowStats?.totalRuns || 0);
-  const successfulRuns = isDemo ? (workflow.totalCompletions || 0) : (workflowStats?.successfulRuns || 0);
+  const overallTriggers = isDemo ? (workflow.analytics?.totalTriggers || 0) : (workflowStats?.totalTriggers || 0);
+  const overallCompletions = isDemo ? (workflow.analytics?.totalCompletions || 0) : (workflowStats?.totalCompletions || 0);
+  const overallRuns = isDemo ? (workflow.analytics?.totalTriggers || 0) : (workflowStats?.totalRuns || 0);
+  const successfulRuns = isDemo ? (workflow.analytics?.totalCompletions || 0) : (workflowStats?.successfulRuns || 0);
   const failedRuns = isDemo ? 0 : (workflowStats?.failedRuns || 0);
   const completionRateValue = isDemo
     ? (parseFloat(workflow.completionRate) || 0)

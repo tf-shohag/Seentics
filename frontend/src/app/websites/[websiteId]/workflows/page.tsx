@@ -33,7 +33,7 @@ export default function WorkflowsPage() {
   // Derived metrics for stats cards
   const totalWorkflows = workflows?.length || 0;
   const activeWorkflowsCount = Array.isArray(workflows) ? workflows.filter(w => w.status === 'Active').length : 0;
-  const totalTriggers = Array.isArray(workflows) ? workflows.reduce((sum, w) => sum + (w.totalTriggers || 0), 0) : 0;
+  const totalTriggers = Array.isArray(workflows) ? workflows.reduce((sum, w) => sum + (w.analytics?.totalTriggers || 0), 0) : 0;
   const avgCompletionRate = (() => {
     const rates = Array.isArray(workflows)
       ? workflows.filter(w => w.completionRate).map(w => parseFloat((w.completionRate as string).replace('%', '')))

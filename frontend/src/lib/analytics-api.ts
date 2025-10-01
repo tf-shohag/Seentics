@@ -1,5 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ChartConfig } from '@/components/ui/chart';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from './api'; // Your existing axios instance
 
 // =============================================================================
@@ -796,51 +796,6 @@ export const formatGrowthRate = (rate: number): { value: string; isPositive: boo
   };
 };
 
-// =============================================================================
-// ANALYTICS SUMMARY INTERFACE & FUNCTIONS
-// =============================================================================
-
-// REMOVED: Backend doesn't support /analytics/summary endpoint for MVP
-// export interface AnalyticsSummary {
-//   website_id: string;
-//   total_visitors: number;
-//   total_page_views: number;
-//   total_sessions: number;
-//   bounce_rate: number;
-//   avg_session_time: number;
-//   pages_per_session: number;
-//   growth_rate: number;
-//   visitors_growth_rate: number;
-//   sessions_growth_rate: number;
-//   new_visitors: number;
-//   returning_visitors: number;
-//   engagement_score: number;
-//   retention_rate: number;
-//   traffic_chart_data: Array<{
-//     date: string;
-//     visitors: number;
-//     page_views: number;
-//   }>;
-// }
-
-// export const getAnalyticsSummary = async (
-//   websiteId: string, 
-//   fromDate: Date, 
-//   toDate: Date
-// ): Promise<AnalyticsSummary> => {
-//   try {
-//     const response = await api.get(`/api/v1/analytics/summary/${websiteId}`, {
-//       params: {
-//         from: fromDate.toISOString(),
-//         to: toDate.toISOString(),
-//       },
-//     });
-//     return response.data;
-//   } catch (error) {
-//     console.error('Error fetching analytics summary:', error);
-//     throw error;
-//   }
-// };
 
 // Chart color mapping for Recharts-based ChartContainer
 export const trafficChartConfig: ChartConfig = {
@@ -1012,6 +967,7 @@ export async function getFunnels(websiteId: string): Promise<Funnel[]> {
     const response = await api.get(`/funnels/`, {
       params: { website_id: websiteId }
     });
+    
     // Handle both direct object response and wrapped response
     if (response.data && response.data.funnels) {
       return response.data.funnels;

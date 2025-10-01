@@ -1,550 +1,366 @@
 (function () {
-  // --- Seentics Analytics Tracker v1.0.2 (Performance & Reliability Fixed) ---
+  // --- Seentics Analytics Tracker v1.0.3 (Optimized) ---
 
-  // --- Main Tracker ---
   if (document.currentScript) {
-    (function (doc, win, nav, loc) {
-      // Configuration
-      const scriptTag = doc.currentScript;
-      const siteId = scriptTag.getAttribute('data-site-id');
-      const apiHost = win.SEENTICS_CONFIG?.apiHost ||
-        (loc.hostname === 'localhost' ?
-          (win.SEENTICS_CONFIG?.devApiHost || 'http://localhost:8080') :
-          'https://api.seentics.com');
-      const API_ENDPOINT = `${apiHost}/api/v1/analytics/event/batch`;
-      const DEBUG = !!(win.SEENTICS_CONFIG?.debugMode || loc.search.includes('debug=true')) && loc.hostname === 'localhost';
+    (function (d, w, n, l) {
+      // Config
+      const script = d.currentScript;
+      const siteId = script.getAttribute('data-site-id');
+      const apiHost = w.SEENTICS_CONFIG?.apiHost || (l.hostname === 'localhost' ? (w.SEENTICS_CONFIG?.devApiHost || 'http://localhost:8080') : 'https://api.seentics.com');
+      const API = `${apiHost}/api/v1/analytics/event/batch`;
+      const DEBUG = !!(w.SEENTICS_CONFIG?.debugMode || l.search.includes('debug=true')) && l.hostname === 'localhost';
 
       // Constants
-      const VISITOR_ID_KEY = 'seentics_visitor_id';
-      const SESSION_ID_KEY = 'seentics_session_id';
-      const SESSION_LAST_SEEN_KEY = 'seentics_session_last_seen';
-      const SESSION_EXPIRY_MS = 1800000; // 30 minutes
-      const VISITOR_EXPIRY_MS = 2592000000; // 30 days
-      const BATCH_DELAY = 100;
-      const MAX_RETRY_ATTEMPTS = 3;
-      const RETRY_DELAY = 1000;
+      const K = { VID: 'seentics_visitor_id', SID: 'seentics_session_id', LAST: 'seentics_session_last_seen' };
+      const T = { SESSION: 1800000, VISITOR: 2592000000, BATCH: 100, RETRY: 1000 };
+      const MAX_RETRY = 3;
 
-      // State variables
-      let visitorId = null;
-      let sessionId = null;
-      let pageStartTime = performance.now();
-      let pageviewSent = false;
-      let currentUrl = loc.pathname;
-      let cachedUTMParams = null;
-      let activityTimeout = null;
-      let isDestroyed = false;
+      // State
+      let vid = null, sid = null, start = performance.now(), pvSent = false, url = l.pathname;
+      let cachedUTM = null, sessionUTM = null, activityTimer = null, destroyed = false;
+      const queue = [], pending = new Map(), cleanup = [];
+      let flushTimer = null, lastRef = null, device = null;
 
-      // Event batching
-      const eventQueue = [];
-      let flushTimeout = null;
-      const pendingRequests = new Map();
+      // --- Helpers ---
+      const safe = (fn) => {
+        try { return fn(); }
+        catch (e) { if (DEBUG) console.warn('Seentics: Storage error:', e); return null; }
+      };
 
-      // Cleanup tracking
-      const cleanupTasks = [];
-
-      // --- Core Functions ---
-
-      function safeLocalStorage(operation) {
-        try {
-          return operation();
-        } catch (error) {
-          if (DEBUG) console.warn('Seentics: LocalStorage error:', error);
-          return null;
+      const getId = (key, exp) => safe(() => {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          let obj;
+          try { obj = JSON.parse(raw); }
+          catch { if (raw.length > 10) return raw; }
+          if (obj?.value && (!obj.expiresAt || Date.now() < obj.expiresAt)) return obj.value;
         }
-      }
+        const val = Date.now().toString(36) + Math.random().toString(36).slice(2);
+        const exp_at = Date.now() + exp;
+        localStorage.setItem(key, JSON.stringify({ value: val, expiresAt: exp_at }));
+        if (key === K.SID) localStorage.setItem(K.LAST, Date.now().toString());
+        return val;
+      }) || Date.now().toString(36) + Math.random().toString(36).slice(2);
 
-      function getOrCreateId(key, expiryMs) {
-        return safeLocalStorage(() => {
-          const raw = localStorage.getItem(key);
-          if (raw) {
-            let obj;
-            try {
-              obj = JSON.parse(raw);
-            } catch {
-              if (raw.length > 10) return raw;
-            }
-
-            if (obj?.value && (!obj.expiresAt || Date.now() < obj.expiresAt)) {
-              return obj.value;
-            }
-          }
-
-          const value = Date.now().toString(36) + Math.random().toString(36).slice(2);
-          const expiresAt = Date.now() + expiryMs;
-          const data = JSON.stringify({ value, expiresAt });
-
-          localStorage.setItem(key, data);
-          if (key === SESSION_ID_KEY) {
-            localStorage.setItem(SESSION_LAST_SEEN_KEY, Date.now().toString());
-          }
-
-          return value;
-        }) || Date.now().toString(36) + Math.random().toString(36).slice(2);
-      }
-
-      function refreshSessionIfNeeded() {
-        safeLocalStorage(() => {
-          const now = Date.now();
-          const lastSeenStr = localStorage.getItem(SESSION_LAST_SEEN_KEY);
-          const lastSeen = lastSeenStr ? parseInt(lastSeenStr, 10) : 0;
-
-          if (lastSeen && now - lastSeen < SESSION_EXPIRY_MS) {
-            localStorage.setItem(SESSION_LAST_SEEN_KEY, now.toString());
-            return;
-          }
-
-          sessionId = getOrCreateId(SESSION_ID_KEY, SESSION_EXPIRY_MS);
-        });
-      }
-
-      function getCurrentDomain() {
-        return loc.hostname.split(':')[0];
-      }
-
-      // --- Request Deduplication ---
-      async function deduplicatedFetch(url, options, retryCount = 0) {
-        if (isDestroyed) return;
-
-        const key = `${url}:${JSON.stringify(options)}`;
-        if (pendingRequests.has(key)) {
-          return pendingRequests.get(key);
+      const refresh = () => safe(() => {
+        const now = Date.now();
+        const last = parseInt(localStorage.getItem(K.LAST) || '0', 10);
+        if (last && now - last < T.SESSION) {
+          localStorage.setItem(K.LAST, now.toString());
+          return;
         }
+        sid = getId(K.SID, T.SESSION);
+      });
+
+      // --- Fetch with retry ---
+      async function dedupFetch(url, opts, retry = 0) {
+        if (destroyed) return;
+        const key = `${url}:${JSON.stringify(opts)}`;
+        if (pending.has(key)) return pending.get(key);
 
         const promise = (async () => {
           try {
-            const response = await fetch(url, options);
-            if (!response.ok && retryCount < MAX_RETRY_ATTEMPTS) {
-              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
-              return deduplicatedFetch(url, options, retryCount + 1);
+            const res = await fetch(url, opts);
+            if (!res.ok && retry < MAX_RETRY) {
+              await new Promise(r => setTimeout(r, T.RETRY * (retry + 1)));
+              return dedupFetch(url, opts, retry + 1);
             }
-            return response;
-          } catch (error) {
-            if (retryCount < MAX_RETRY_ATTEMPTS) {
-              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
-              return deduplicatedFetch(url, options, retryCount + 1);
+            return res;
+          } catch (e) {
+            if (retry < MAX_RETRY) {
+              await new Promise(r => setTimeout(r, T.RETRY * (retry + 1)));
+              return dedupFetch(url, opts, retry + 1);
             }
-            throw error;
+            throw e;
           }
         })();
 
-        pendingRequests.set(key, promise);
-        promise.finally(() => pendingRequests.delete(key));
+        pending.set(key, promise);
+        promise.finally(() => pending.delete(key));
         return promise;
       }
 
-      // --- Event Batching ---
+      // --- Event batching ---
+      const addEvent = (evt) => {
+        if (destroyed) return;
+        queue.push(evt);
+        if (!flushTimer) flushTimer = setTimeout(flush, T.BATCH);
+      };
 
-      function queueEvent(event) {
-        if (isDestroyed) return;
-        eventQueue.push(event);
-
-        if (!flushTimeout) {
-          flushTimeout = setTimeout(flushEventQueue, BATCH_DELAY);
-        }
-      }
-
-      async function flushEventQueue() {
-        const events = eventQueue.splice(0);
-        flushTimeout = null;
-
+      async function flush() {
+        const events = queue.splice(0);
+        flushTimer = null;
         try {
-          const payload = {
-            siteId: siteId,
-            domain: loc.hostname,
-            events: events
-          };
-
-
-          const batchData = JSON.stringify(payload);
-
-          if (nav.sendBeacon) {
-            const blob = new Blob([batchData], { type: 'application/json' });
-            nav.sendBeacon(API_ENDPOINT, blob);
+          const data = JSON.stringify({ siteId, domain: l.hostname, events });
+          if (n.sendBeacon) {
+            n.sendBeacon(API, new Blob([data], { type: 'application/json' }));
           } else {
-            await deduplicatedFetch(API_ENDPOINT, {
+            await dedupFetch(API, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(batchData),
-              credentials: 'omit', // Explicitly omit credentials for public tracking
+              body: data,
+              credentials: 'omit',
               keepalive: true
             });
           }
-        } catch (error) {
-          if (DEBUG) console.warn('Seentics: Failed to send events', error);
-          // Re-queue events on failure
-          eventQueue.unshift(...events);
+        } catch (e) {
+          if (DEBUG) console.warn('Seentics: Batch failed', e);
+          queue.unshift(...events);
         }
       }
 
-      // --- Custom Event Tracking ---
-
-      // Cache for session-level data to avoid repetition
-      let lastReferrer = null;
-      let deviceInfo = null;
-
-      function getDeviceInfo() {
-        if (deviceInfo) return deviceInfo;
-        const ua = nav.userAgent;
-        deviceInfo = {
-          browser: getBrowser(ua),
-          device: getDevice(ua),
-          os: getOS(ua)
+      // --- Device detection ---
+      const getDevice = () => {
+        if (device) return device;
+        const ua = n.userAgent;
+        device = {
+          browser: ua.includes('Chrome') ? 'Chrome' : ua.includes('Firefox') ? 'Firefox' : ua.includes('Safari') ? 'Safari' : ua.includes('Edge') ? 'Edge' : 'Other',
+          device: /iPad|Android(?=.*Mobile)|PlayBook|Silk/i.test(ua) ? 'Tablet' : /Mobi|Android/i.test(ua) ? 'Mobile' : 'Desktop',
+          os: ua.includes('Windows') ? 'Windows' : ua.includes('Mac') ? 'macOS' : ua.includes('Linux') ? 'Linux' : ua.includes('Android') ? 'Android' : ua.includes('iOS') ? 'iOS' : 'Other'
         };
-        return deviceInfo;
-      }
+        return device;
+      };
 
-      function getBrowser(ua) {
-        if (ua.includes('Chrome')) return 'Chrome';
-        if (ua.includes('Firefox')) return 'Firefox';
-        if (ua.includes('Safari')) return 'Safari';
-        if (ua.includes('Edge')) return 'Edge';
-        return 'Other';
-      }
+      // --- UTM extraction ---
+      const getUTM = () => {
+        const params = new URLSearchParams(l.search);
+        const utm = {
+          utm_source: params.get('utm_source'),
+          utm_medium: params.get('utm_medium'),
+          utm_campaign: params.get('utm_campaign'),
+          utm_term: params.get('utm_term'),
+          utm_content: params.get('utm_content')
+        };
+        const hasUTM = Object.values(utm).some(v => v !== null);
+        if (hasUTM) {
+          sessionUTM = { ...utm };
+          cachedUTM = { ...utm };
+        } else if (sessionUTM) {
+          cachedUTM = { ...sessionUTM };
+        } else {
+          cachedUTM = utm;
+        }
+        return cachedUTM;
+      };
 
-      function getDevice(ua) {
-        if (/iPad|Android(?=.*Mobile)|PlayBook|Silk/i.test(ua)) return 'Tablet';
-        if (/Mobi|Android/i.test(ua)) return 'Mobile';
-        return 'Desktop';
-      }
-
-      function getOS(ua) {
-        if (ua.includes('Windows')) return 'Windows';
-        if (ua.includes('Mac')) return 'macOS';
-        if (ua.includes('Linux')) return 'Linux';
-        if (ua.includes('Android')) return 'Android';
-        if (ua.includes('iOS')) return 'iOS';
-        return 'Other';
-      }
-
-      function trackCustomEvent(eventName, properties = {}) {
-        if (!siteId || !eventName || typeof eventName !== 'string') {
-          if (DEBUG) console.warn('Seentics: Invalid event parameters');
+      // --- Custom event tracking ---
+      const track = (name, props = {}) => {
+        if (!siteId || !name || typeof name !== 'string') {
+          if (DEBUG) console.warn('Seentics: Invalid event params');
           return;
         }
 
-        refreshSessionIfNeeded();
-
-        const event = {
+        refresh();
+        const evt = {
           website_id: siteId,
-          visitor_id: visitorId,
-          session_id: sessionId,
-          event_type: eventName,
-          page: loc.pathname,
-          properties,
+          visitor_id: vid,
+          session_id: sid,
+          event_type: name,
+          page: l.pathname,
+          properties: props,
           timestamp: new Date().toISOString()
         };
 
-        // Only include referrer if it's new or first event in session
-        const currentReferrer = doc.referrer || null;
-        if (currentReferrer !== lastReferrer) {
-          event.referrer = currentReferrer;
-          lastReferrer = currentReferrer;
+        const ref = d.referrer || null;
+        if (ref !== lastRef) {
+          evt.referrer = ref;
+          lastRef = ref;
         }
 
+        const dev = getDevice();
+        evt.browser = dev.browser;
+        evt.device = dev.device;
+        evt.os = dev.os;
 
-        const deviceData = getDeviceInfo();
-        event.browser = deviceData.browser;
-        event.device = deviceData.device;
-        event.os = deviceData.os;
+        const utm = getUTM();
+        Object.keys(utm).forEach(k => { if (utm[k]) evt[k] = utm[k]; });
 
-        // Include UTM parameters for custom events too
-        const utmParams = extractUTMParameters();
-        Object.keys(utmParams).forEach(key => {
-          if (utmParams[key]) {
-            event[key] = utmParams[key];
-          }
-        });
+        addEvent(evt);
 
-        queueEvent(event);
-
-        // Emit for funnel tracker
         try {
-          doc.dispatchEvent(new CustomEvent('seentics:custom-event', {
-            detail: { eventName, data: properties }
+          d.dispatchEvent(new CustomEvent('seentics:custom-event', {
+            detail: { eventName: name, data: props }
           }));
         } catch { }
-      }
+      };
 
-      // --- Pageview Tracking ---
+      // --- Pageview tracking ---
+      const sendPV = () => {
+        if (pvSent || !siteId || destroyed) return;
+        const time = Math.round((performance.now() - start) / 1000);
+        refresh();
 
-      // UTM parameter extraction with session-level persistence
-      let sessionUTMParams = null; // Session-level UTM storage
-
-      function extractUTMParameters() {
-        // Always extract UTM parameters from the current URL
-        const currentSearch = loc.search;
-        const urlParams = new URLSearchParams(currentSearch);
-        
-        const utmParams = {
-          utm_source: urlParams.get('utm_source'),
-          utm_medium: urlParams.get('utm_medium'),
-          utm_campaign: urlParams.get('utm_campaign'),
-          utm_term: urlParams.get('utm_term'),
-          utm_content: urlParams.get('utm_content')
-        };
-
-        // If we found UTM params in current URL, store them for the session
-        const hasUTMParams = Object.values(utmParams).some(value => value !== null);
-        if (hasUTMParams) {
-          sessionUTMParams = { ...utmParams };
-          cachedUTMParams = { ...utmParams };
-        } else if (sessionUTMParams) {
-          // Use session UTM params if current URL has none
-          cachedUTMParams = { ...sessionUTMParams };
-        } else {
-          // No UTM params anywhere
-          cachedUTMParams = utmParams;
-        }
-
-        return cachedUTMParams;
-      }
-
-
-      function sendPageview() {
-        if (pageviewSent || !siteId || isDestroyed) return;
-
-        const timeOnPage = Math.round((performance.now() - pageStartTime) / 1000);
-
-        refreshSessionIfNeeded();
-
-        const event = {
+        const evt = {
           website_id: siteId,
-          visitor_id: visitorId,
-          session_id: sessionId,
+          visitor_id: vid,
+          session_id: sid,
           event_type: 'pageview',
-          page: loc.pathname,
-          time_on_page: timeOnPage,
+          page: l.pathname,
+          time_on_page: time,
           timestamp: new Date().toISOString()
         };
 
-        // Only include referrer if it's new or first pageview in session
-        const currentReferrer = doc.referrer || null;
-        if (currentReferrer !== lastReferrer) {
-          event.referrer = currentReferrer;
-          lastReferrer = currentReferrer;
+        const ref = d.referrer || null;
+        if (ref !== lastRef) {
+          evt.referrer = ref;
+          lastRef = ref;
         }
 
+        const dev = getDevice();
+        evt.browser = dev.browser;
+        evt.device = dev.device;
+        evt.os = dev.os;
 
-        const deviceData = getDeviceInfo();
-        event.browser = deviceData.browser;
-        event.device = deviceData.device;
-        event.os = deviceData.os;
+        const utm = getUTM();
+        Object.keys(utm).forEach(k => { if (utm[k]) evt[k] = utm[k]; });
 
-        // Include UTM parameters if available
-        const utmParams = extractUTMParameters();
-        // Only include UTM params that have values
-        Object.keys(utmParams).forEach(key => {
-          if (utmParams[key]) {
-            event[key] = utmParams[key];
-          }
-        });
+        pvSent = true;
+        addEvent(evt);
+      };
 
-        pageviewSent = true;
-        queueEvent(event);
-      }
-
-      // --- Event Listeners ---
-
-      function onActivity() {
-        if (activityTimeout || isDestroyed) return;
-        activityTimeout = setTimeout(() => {
-          if (!isDestroyed) {
-            refreshSessionIfNeeded();
-          }
-          activityTimeout = null;
+      // --- Activity handler ---
+      const onActivity = () => {
+        if (activityTimer || destroyed) return;
+        activityTimer = setTimeout(() => {
+          if (!destroyed) refresh();
+          activityTimer = null;
         }, 1000);
-      }
+      };
 
-      function onRouteChange() {
-        if (isDestroyed) return;
-        const newUrl = loc.pathname;
-        if (newUrl === currentUrl) return;
+      // --- Route change ---
+      const onRoute = () => {
+        if (destroyed) return;
+        const newUrl = l.pathname;
+        if (newUrl === url) return;
+        url = newUrl;
+        start = performance.now();
+        pvSent = false;
+        requestIdleCallback(() => sendPV());
+      };
 
-        currentUrl = newUrl;
-        pageStartTime = performance.now();
-        pageviewSent = false;
+      // --- Cleanup ---
+      const destroy = () => {
+        destroyed = true;
+        if (activityTimer) { clearTimeout(activityTimer); activityTimer = null; }
+        if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+        cleanup.forEach(fn => { try { fn(); } catch (e) { } });
+        cleanup.length = 0;
+        if (queue.length > 0) flush();
+        pending.clear();
+      };
 
-        requestIdleCallback(() => sendPageview());
-      }
+      // --- Event listeners ---
+      const setup = () => {
+        const vis = () => {
+          if (destroyed) return;
+          if (d.hidden && !pvSent) sendPV();
+          refresh();
+        };
+        d.addEventListener('visibilitychange', vis, { passive: true });
+        cleanup.push(() => d.removeEventListener('visibilitychange', vis));
 
-      // Cleanup function
-      function cleanup() {
-        isDestroyed = true;
+        const unload = () => {
+          if (!pvSent) sendPV();
+          if (queue.length > 0) flush();
+          destroy();
+        };
+        w.addEventListener('beforeunload', unload);
+        cleanup.push(() => w.removeEventListener('beforeunload', unload));
 
-        // Clear timers
-        if (activityTimeout) {
-          clearTimeout(activityTimeout);
-          activityTimeout = null;
+        // Throttled activity
+        let throttle = null;
+        const throttled = () => {
+          if (throttle) return;
+          throttle = setTimeout(() => { onActivity(); throttle = null; }, 100);
+        };
+
+        ['click', 'keydown'].forEach(e => {
+          d.addEventListener(e, onActivity, { passive: true });
+          cleanup.push(() => d.removeEventListener(e, onActivity));
+        });
+
+        ['scroll', 'mousemove', 'touchstart'].forEach(e => {
+          d.addEventListener(e, throttled, { passive: true });
+          cleanup.push(() => d.removeEventListener(e, throttled));
+        });
+
+        // SPA navigation
+        const origPush = history.pushState;
+        const origReplace = history.replaceState;
+        history.pushState = function (...a) { origPush.apply(this, a); onRoute(); };
+        history.replaceState = function (...a) { origReplace.apply(this, a); onRoute(); };
+        w.addEventListener('popstate', onRoute);
+        cleanup.push(() => {
+          w.removeEventListener('popstate', onRoute);
+          history.pushState = origPush;
+          history.replaceState = origReplace;
+        });
+      };
+
+      // --- Resource loader ---
+      const load = (src, type = 'script') => new Promise(res => {
+        const attr = type === 'script' ? 'src' : 'href';
+        if (d.querySelector(`${type}[${attr}="${src}"]`)) return res();
+        const el = d.createElement(type);
+        if (type === 'script') {
+          el.src = src;
+          el.async = true;
+        } else {
+          el.rel = 'stylesheet';
+          el.href = src;
+          el.type = 'text/css';
         }
-        if (flushTimeout) {
-          clearTimeout(flushTimeout);
-          flushTimeout = null;
-        }
+        el.onload = el.onerror = () => res();
+        d.head.appendChild(el);
+      });
 
-        // Execute cleanup tasks
-        cleanupTasks.forEach(task => {
-          try {
-            task();
-          } catch (error) {
-            if (DEBUG) console.warn('Seentics: Cleanup error:', error);
-          }
-        });
-        cleanupTasks.length = 0;
-
-        // Final flush
-        if (eventQueue.length > 0) {
-          flushEventQueue();
-        }
-
-        // Clear pending requests
-        pendingRequests.clear();
-      }
-
-      // Setup all event listeners
-      function setupEventListeners() {
-        const visibilityHandler = () => {
-          if (isDestroyed) return;
-          if (doc.hidden && !pageviewSent) {
-            sendPageview();
-          }
-          refreshSessionIfNeeded();
-        };
-        doc.addEventListener('visibilitychange', visibilityHandler, { passive: true });
-        cleanupTasks.push(() => doc.removeEventListener('visibilitychange', visibilityHandler));
-
-        const beforeUnloadHandler = () => {
-          if (!pageviewSent) sendPageview();
-          if (eventQueue.length > 0) flushEventQueue();
-          cleanup();
-        };
-        win.addEventListener('beforeunload', beforeUnloadHandler);
-        cleanupTasks.push(() => win.removeEventListener('beforeunload', beforeUnloadHandler));
-
-        // Activity listeners with throttling for high-frequency events
-        let throttleTimeout = null;
-        const throttledActivity = () => {
-          if (throttleTimeout) return;
-          throttleTimeout = setTimeout(() => {
-            onActivity();
-            throttleTimeout = null;
-          }, 100); // Throttle to max 10 calls per second
-        };
-
-        // Low frequency events - no throttling needed
-        ['click', 'keydown'].forEach(evt => {
-          doc.addEventListener(evt, onActivity, { passive: true });
-          cleanupTasks.push(() => doc.removeEventListener(evt, onActivity));
-        });
-
-        // High frequency events - throttled
-        ['scroll', 'mousemove', 'touchstart'].forEach(evt => {
-          doc.addEventListener(evt, throttledActivity, { passive: true });
-          cleanupTasks.push(() => doc.removeEventListener(evt, throttledActivity));
-        });
-
-        // SPA navigation detection
-        const originalPushState = history.pushState;
-        const originalReplaceState = history.replaceState;
-
-        history.pushState = function (...args) {
-          originalPushState.apply(this, args);
-          onRouteChange();
-        };
-
-        history.replaceState = function (...args) {
-          originalReplaceState.apply(this, args);
-          onRouteChange();
-        };
-
-        const popstateHandler = onRouteChange;
-        win.addEventListener('popstate', popstateHandler);
-        cleanupTasks.push(() => {
-          win.removeEventListener('popstate', popstateHandler);
-          history.pushState = originalPushState;
-          history.replaceState = originalReplaceState;
-        });
-      }
-
-      // --- Resource Loading ---
-
-      function loadResource(src, type = 'script') {
-        return new Promise((resolve) => {
-          const existing = doc.querySelector(`${type}[${type === 'script' ? 'src' : 'href'}="${src}"]`);
-          if (existing) {
-            resolve();
-            return;
-          }
-
-          const element = doc.createElement(type);
-          if (type === 'script') {
-            element.src = src;
-            element.async = true;
-          } else {
-            element.rel = 'stylesheet';
-            element.href = src;
-            element.type = 'text/css';
-          }
-
-          element.onload = () => resolve();
-          element.onerror = () => resolve();
-
-          doc.head.appendChild(element);
-        });
-      }
-
-      async function loadAdditionalTrackers() {
+      const loadTrackers = async () => {
         try {
           await Promise.all([
-            loadResource('/trackers/shared-constants.js'), // Load shared constants first
-            loadResource('/trackers/styles/tracker-styles.css', 'link'),
-            loadResource('/trackers/workflow-tracker.js'),
-            loadResource('/trackers/funnel-tracker.js')
+            load('/trackers/shared-constants.js'),
+            load('/trackers/styles/tracker-styles.css', 'link'),
+            load('/trackers/workflow-tracker.js'),
+            load('/trackers/funnel-tracker.js')
           ]);
-
-          if (win.seentics?.workflowTracker) {
-            await win.seentics.workflowTracker.init(siteId);
-          }
-        } catch (error) {
-          if (DEBUG) console.warn('Seentics: Failed to load additional trackers', error);
+          if (w.seentics?.workflowTracker) await w.seentics.workflowTracker.init(siteId);
+        } catch (e) {
+          if (DEBUG) console.warn('Seentics: Tracker load failed', e);
         }
-      }
+      };
 
-      // --- Initialization ---
-      function init() {
+      // --- Init ---
+      const init = () => {
         if (!siteId) {
-          if (DEBUG) console.warn('Seentics: No site ID provided');
+          if (DEBUG) console.warn('Seentics: No site ID');
           return;
         }
 
-        // Initialize IDs
-        visitorId = getOrCreateId(VISITOR_ID_KEY, VISITOR_EXPIRY_MS);
-        sessionId = getOrCreateId(SESSION_ID_KEY, SESSION_EXPIRY_MS);
+        vid = getId(K.VID, T.VISITOR);
+        sid = getId(K.SID, T.SESSION);
 
-        requestIdleCallback(() => sendPageview());
-        setupEventListeners();
-        requestIdleCallback(() => loadAdditionalTrackers());
+        requestIdleCallback(() => sendPV());
+        setup();
+        requestIdleCallback(() => loadTrackers());
 
-        // Public API
-        win.seentics = {
+        w.seentics = {
           siteId,
           apiHost,
-          track: trackCustomEvent,
-          sendPageview,
-          cleanup,
-          getDeviceInfo, // Expose device info for other trackers
+          track,
+          sendPageview: sendPV,
+          cleanup: destroy,
+          getDeviceInfo: getDevice,
           ...(DEBUG && {
-            getVisitorId: () => visitorId,
-            getSessionId: () => sessionId,
-            flushEvents: flushEventQueue,
-            getUTMParams: () => sessionUTMParams || cachedUTMParams,
-            getCurrentURL: () => loc.href
+            getVisitorId: () => vid,
+            getSessionId: () => sid,
+            flushEvents: flush,
+            getUTMParams: () => sessionUTM || cachedUTM,
+            getCurrentURL: () => l.href
           })
         };
-      }
+      };
 
-      // Initialize
-      if (doc.readyState === 'loading') {
-        doc.addEventListener('DOMContentLoaded', init);
+      if (d.readyState === 'loading') {
+        d.addEventListener('DOMContentLoaded', init);
       } else {
         requestIdleCallback(init);
       }
