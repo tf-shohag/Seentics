@@ -30,8 +30,8 @@ export function DashboardStats({ siteId }: DashboardStatsProps) {
         [];
 
   const activeWorkflows = Array.isArray(workflows) ? workflows.filter(w => w.status === 'Active').length : 0;
-  const totalTriggers = Array.isArray(workflows) ? workflows.reduce((sum, w) => sum + (w.totalTriggers || 0), 0) : 0;
-  const totalCompletions = Array.isArray(workflows) ? workflows.reduce((sum, w) => sum + (w.totalCompletions || 0), 0) : 0;
+  const totalTriggers = Array.isArray(workflows) ? workflows.reduce((sum, w) => sum + (w.analytics?.totalTriggers || 0), 0) : 0;
+  const totalCompletions = Array.isArray(workflows) ? workflows.reduce((sum, w) => sum + (w.analytics?.totalCompletions || 0), 0) : 0;
   const rawAvgCompletionRate = totalCompletions > 0 && totalTriggers > 0 ? (totalCompletions / totalTriggers) * 100 : 0;
   const avgCompletionRate = Math.min(100, rawAvgCompletionRate);
 

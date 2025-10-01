@@ -1,171 +1,71 @@
 (function () {
   'use strict';
 
-  // --- Seentics Workflow Tracker v1.0.2 (Fixed Action Frequency & Error Handling) ---
-  // Fixed: Action frequency logic, error boundaries, memory leaks, performance issues
+  // --- Seentics Workflow Tracker v1.0.3 (Optimized) ---
 
-  // --- Use Shared Constants ---
-  const SHARED = window.SEENTICS_SHARED || {};
-  const TRIGGERS = SHARED.WORKFLOW_TRIGGERS || {
-    PAGE_VIEW: 'Page View',
-    ELEMENT_CLICK: 'Element Click',
-    FUNNEL: 'Funnel',
-    TIME_SPENT: 'Time Spent',
-    EXIT_INTENT: 'Exit Intent'
-  };
+  const S = window.SEENTICS_SHARED || {};
+  const T = S.WORKFLOW_TRIGGERS || { PAGE_VIEW: 'Page View', ELEMENT_CLICK: 'Element Click', FUNNEL: 'Funnel', TIME_SPENT: 'Time Spent', EXIT_INTENT: 'Exit Intent' };
+  const A = S.WORKFLOW_ACTIONS || { SHOW_MODAL: 'Show Modal', SHOW_BANNER: 'Show Banner', SHOW_NOTIFICATION: 'Show Notification', TRACK_EVENT: 'Track Event', WEBHOOK: 'Webhook', REDIRECT_URL: 'Redirect URL' };
+  const C = S.WORKFLOW_CONDITIONS || { URL_PATH: 'URL Path', TRAFFIC_SOURCE: 'Traffic Source', NEW_VS_RETURNING: 'New vs Returning', DEVICE: 'Device Type' };
+  const F = S.FREQUENCY_TYPES || { EVERY_TRIGGER: 'every_trigger', ONCE_PER_SESSION: 'once_per_session', ONCE_EVER: 'once_ever' };
 
-  const ACTIONS = SHARED.WORKFLOW_ACTIONS || {
-    SHOW_MODAL: 'Show Modal',
-    SHOW_BANNER: 'Show Banner',
-    SHOW_NOTIFICATION: 'Show Notification',
-    TRACK_EVENT: 'Track Event',
-    WEBHOOK: 'Webhook',
-    REDIRECT_URL: 'Redirect URL'
-  };
-
-  const CONDITIONS = SHARED.WORKFLOW_CONDITIONS || {
-    URL_PATH: 'URL Path',
-    TRAFFIC_SOURCE: 'Traffic Source',
-    NEW_VS_RETURNING: 'New vs Returning',
-    DEVICE: 'Device Type'
-  };
-
-  const FREQUENCY_TYPES = SHARED.FREQUENCY_TYPES || {
-    EVERY_TRIGGER: 'every_trigger',
-    ONCE_PER_SESSION: 'once_per_session',
-    ONCE_EVER: 'once_ever'
-  };
-
-  // --- Use Shared Utilities ---
-  const storage = SHARED.SharedUtils?.safeLocalStorage || {
-    get: (key) => {
-      try {
-        return localStorage.getItem(key);
-      } catch (error) {
-        console.warn('[Seentics] LocalStorage read error:', error);
-        return null;
-      }
-    },
-    set: (key, value) => {
-      try {
-        localStorage.setItem(key, value);
-        return true;
-      } catch (error) {
-        console.warn('[Seentics] LocalStorage write error:', error);
-        return false;
-      }
-    },
-    remove: (key) => {
-      try {
-        localStorage.removeItem(key);
-        return true;
-      } catch (error) {
-        console.warn('[Seentics] LocalStorage remove error:', error);
-        return false;
-      }
-    }
-  };
-
-  const sessionStorage = SHARED.SharedUtils?.safeSessionStorage || {
-    get: (key) => {
-      try {
-        return window.sessionStorage.getItem(key);
-      } catch (error) {
-        console.warn('[Seentics] SessionStorage read error:', error);
-        return null;
-      }
-    },
-    set: (key, value) => {
-      try {
-        window.sessionStorage.setItem(key, value);
-        return true;
-      } catch (error) {
-        console.warn('[Seentics] SessionStorage write error:', error);
-        return false;
-      }
-    }
-  };
-
-  // Use shared utility functions
-  const generateId = SHARED.SharedUtils?.generateId || (() => `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`);
-  
-  // Use shared utilities from main tracker
-  const getDeviceType = () => {
-    // Delegate to main tracker's device detection if available
-    if (window.seentics?.getDeviceInfo) {
-      const deviceInfo = window.seentics.getDeviceInfo();
-      return deviceInfo.device || 'Desktop';
-    }
-    
-    // Fallback device detection
-    const userAgent = navigator.userAgent;
-    if (/iPad|Android(?=.*Mobile)|PlayBook|Silk/i.test(userAgent)) return 'Tablet';
-    if (/Mobi|Android/i.test(userAgent)) return 'Mobile';
-    return 'Desktop';
-  };
-  
-  // Use shared throttle utility
-  const throttle = SHARED.SharedUtils?.throttle || ((fn, delay) => {
-    let last = 0;
-    return (...args) => {
-      const now = Date.now();
-      if (now - last >= delay) {
-        last = now;
-        fn(...args);
-      }
-    };
+  // Storage utilities
+  const mkStorage = (store) => ({
+    get: k => { try { return store.getItem(k) } catch (e) { return null } },
+    set: (k, v) => { try { store.setItem(k, v); return true } catch (e) { return false } },
+    remove: k => { try { store.removeItem(k); return true } catch (e) { return false } }
   });
 
-  // --- Analytics Manager ---
-  class AnalyticsManager {
-    constructor(apiHost, siteId) {
-      this.apiHost = apiHost;
+  const storage = S.SharedUtils?.safeLocalStorage || mkStorage(localStorage);
+  const sessionStorage = S.SharedUtils?.safeSessionStorage || mkStorage(window.sessionStorage);
+  const genId = S.SharedUtils?.generateId || (() => `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`);
+  const throttle = S.SharedUtils?.throttle || ((fn, d) => { let l = 0; return (...a) => { const n = Date.now(); if (n - l >= d) { l = n; fn(...a) } } });
+
+  const getDevice = () => {
+    if (window.seentics?.getDeviceInfo) return window.seentics.getDeviceInfo().device || 'Desktop';
+    const ua = navigator.userAgent;
+    return /iPad|Android(?=.*Mobile)|PlayBook|Silk/i.test(ua) ? 'Tablet' : /Mobi|Android/i.test(ua) ? 'Mobile' : 'Desktop';
+  };
+
+  // Analytics Manager
+  class Analytics {
+    constructor(host, siteId) {
+      this.host = host;
       this.siteId = siteId;
       this.batch = [];
-      this.batchTimer = null;
+      this.timer = null;
     }
 
-    addEvent(payload) {
+    add(payload) {
       this.batch.push(payload);
-      this._scheduleBatch();
+      if (!this.timer) this.timer = setTimeout(() => this.send(), 2000);
     }
 
-    _scheduleBatch() {
-      if (this.batchTimer) return;
-      this.batchTimer = setTimeout(() => this._sendBatch(), 2000);
-    }
-
-    async _sendBatch() {
-      if (this.batch.length === 0) return;
-
+    async send() {
+      if (!this.batch.length) return;
       const events = [...this.batch];
       this.batch = [];
-      this.batchTimer = null;
-
+      this.timer = null;
       try {
-        await fetch(`${this.apiHost}/api/v1/workflows/analytics/track/batch`, {
+        await fetch(`${this.host}/api/v1/workflows/analytics/track/batch`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ siteId: this.siteId, events }),
-          credentials: 'omit', // Explicitly omit credentials for public tracking
+          credentials: 'omit',
           keepalive: true
         });
-      } catch (error) {
-        console.warn('[Seentics] Analytics batch failed:', error);
-      }
+      } catch (e) { }
     }
 
-    destroy() {
-      this._sendBatch();
-    }
+    destroy() { this.send(); }
   }
 
-  // --- Main Workflow Tracker ---
-  const workflowTracker = {
+  // Main Tracker
+  const WT = {
     siteId: null,
     visitorId: null,
-    isReturningVisitor: false,
-    activeWorkflows: [],
+    isReturning: false,
+    workflows: [],
     analytics: null,
     timers: new Set(),
     listeners: new Map(),
@@ -174,649 +74,517 @@
       if (!siteId) return console.error('[Seentics] Invalid siteId');
 
       this.siteId = siteId;
-      this.visitorId = this._getVisitorId();
-      this.isReturningVisitor = this._checkReturning();
-      this.analytics = new AnalyticsManager(this._getApiHost(), siteId);
+      this.visitorId = this._getVid();
+      this.isReturning = this._checkRet();
+      this.analytics = new Analytics(this._getHost(), siteId);
 
       if (siteId === 'preview' && window.__SEENTICS_PREVIEW_WORKFLOW) {
-        this.activeWorkflows = [window.__SEENTICS_PREVIEW_WORKFLOW];
-        this._setupTriggers();
+        this.workflows = [window.__SEENTICS_PREVIEW_WORKFLOW];
+        this._setup();
       } else {
-        this._fetchWorkflows();
+        this._fetch();
       }
     },
 
-    _getVisitorId() {
+    _getVid() {
       let id = storage.get('seentics_visitor_id');
-      if (!id) {
-        id = generateId();
-        storage.set('seentics_visitor_id', id);
-      }
+      if (!id) { id = genId(); storage.set('seentics_visitor_id', id); }
       return id;
     },
 
-    _checkReturning() {
-      const returning = storage.get('seentics_returning');
-      if (returning) return true;
+    _checkRet() {
+      const ret = storage.get('seentics_returning');
+      if (ret) return true;
       storage.set('seentics_returning', 'true');
       return false;
     },
 
-    _getApiHost() {
-      const config = window.SEENTICS_CONFIG;
-      if (config?.apiHost) return config.apiHost;
-      return window.location.hostname === 'localhost' ? 'http://localhost:8080' : 'https://api.seentics.com';
+    _getHost() {
+      const cfg = window.SEENTICS_CONFIG;
+      return cfg?.apiHost || (location.hostname === 'localhost' ? 'http://localhost:8080' : 'https://api.seentics.com');
     },
 
-    async _fetchWorkflows() {
+    async _fetch() {
       try {
-        const response = await fetch(`${this._getApiHost()}/api/v1/workflows/site/${this.siteId}/active`, {
-          credentials: 'omit' // Explicitly omit credentials for public tracking
-        });
-        const data = await response.json();
-        this.activeWorkflows = data?.workflows?.filter(w => w.status === 'Active') || [];
-        this._setupTriggers();
-      } catch (error) {
-        console.error('[Seentics] Failed to fetch workflows:', error);
+        const res = await fetch(`${this._getHost()}/api/v1/workflows/site/${this.siteId}/active`, { credentials: 'omit' });
+        const data = await res.json();
+        this.workflows = data?.workflows?.filter(w => w.status === 'Active') || [];
+        this._setup();
+      } catch (e) {
+        console.error('[Seentics] Failed to fetch workflows:', e);
       }
     },
 
-    _setupTriggers() {
-      // Page view trigger - initial page load
-      this._checkTrigger(TRIGGERS.PAGE_VIEW);
+    _setup() {
+      // Page view
+      this._check(T.PAGE_VIEW);
+      this._setupNav();
 
-      // Setup page navigation detection for SPA routing
-      this._setupPageNavigation();
-
-      // Time spent triggers
-      this.activeWorkflows.forEach(workflow => {
-        const timeNodes = this._getNodes(workflow, TRIGGERS.TIME_SPENT);
-        timeNodes.forEach(node => {
-          const seconds = node.data?.settings?.seconds || 0;
-          if (seconds > 0) {
-            const timer = setTimeout(() => this._executeWorkflow(workflow, node), seconds * 1000);
-            this.timers.add(timer);
+      // Time spent
+      this.workflows.forEach(w => {
+        this._nodes(w, T.TIME_SPENT).forEach(n => {
+          const s = n.data?.settings?.seconds || 0;
+          if (s > 0) {
+            const t = setTimeout(() => this._exec(w, n), s * 1000);
+            this.timers.add(t);
           }
         });
       });
 
-      // Exit intent trigger
-      const exitHandler = throttle((e) => {
-        if (e.clientY <= 5) this._checkTrigger(TRIGGERS.EXIT_INTENT);
-      }, 100);
-      document.addEventListener('mousemove', exitHandler);
-      this.listeners.set('exit', () => document.removeEventListener('mousemove', exitHandler));
+      // Exit intent
+      const exit = throttle(e => { if (e.clientY <= 5) this._check(T.EXIT_INTENT); }, 50);
+      document.addEventListener('mousemove', exit);
+      this.listeners.set('exit', () => document.removeEventListener('mousemove', exit));
 
-      // Click triggers
-      const clickHandler = throttle((e) => {
-        this.activeWorkflows.forEach(workflow => {
-          const clickNodes = this._getNodes(workflow, TRIGGERS.ELEMENT_CLICK);
-          clickNodes.forEach(node => {
-            const selector = node.data?.settings?.selector;
-            if (selector && e.target.matches?.(selector)) {
-              this._executeWorkflow(workflow, node);
-            }
+      // Clicks
+      const click = throttle(e => {
+        this.workflows.forEach(w => {
+          this._nodes(w, T.ELEMENT_CLICK).forEach(n => {
+            const sel = n.data?.settings?.selector;
+            if (sel && e.target.matches?.(sel)) this._exec(w, n);
           });
         });
       }, 100);
-      document.addEventListener('click', clickHandler);
-      this.listeners.set('click', () => document.removeEventListener('click', clickHandler));
+      document.addEventListener('click', click);
+      this.listeners.set('click', () => document.removeEventListener('click', click));
 
-      // Funnel events
-      document.addEventListener('seentics:funnel-event', (e) => {
-        this._checkTrigger(TRIGGERS.FUNNEL, e.detail);
-      });
+      // Funnel
+      document.addEventListener('seentics:funnel-event', e => this._check(T.FUNNEL, e.detail));
     },
 
-    _setupPageNavigation() {
-      let currentUrl = window.location.pathname;
-
-      const onRouteChange = () => {
-        const newUrl = window.location.pathname;
-        if (newUrl !== currentUrl) {
-          currentUrl = newUrl;
-          // Trigger page view workflows on navigation
-          this._checkTrigger(TRIGGERS.PAGE_VIEW);
-        }
+    _setupNav() {
+      let url = location.pathname;
+      const onChange = () => {
+        const newUrl = location.pathname;
+        if (newUrl !== url) { url = newUrl; this._check(T.PAGE_VIEW); }
       };
 
-      // SPA navigation detection
-      const originalPushState = history.pushState;
-      const originalReplaceState = history.replaceState;
-
-      history.pushState = function (...args) {
-        originalPushState.apply(this, args);
-        onRouteChange();
-      };
-
-      history.replaceState = function (...args) {
-        originalReplaceState.apply(this, args);
-        onRouteChange();
-      };
-
-      window.addEventListener('popstate', onRouteChange);
+      const origPush = history.pushState;
+      const origReplace = history.replaceState;
+      history.pushState = function (...a) { origPush.apply(this, a); onChange(); };
+      history.replaceState = function (...a) { origReplace.apply(this, a); onChange(); };
+      window.addEventListener('popstate', onChange);
     },
 
-    _getNodes(workflow, type) {
-      return workflow.nodes?.filter(n => n.data?.type === 'Trigger' && n.data?.title === type) || [];
+    _nodes(w, type) {
+      return w.nodes?.filter(n => n.data?.type === 'Trigger' && n.data?.title === type) || [];
     },
 
-    _checkTrigger(triggerType, eventData = {}) {
-      this.activeWorkflows.forEach(workflow => {
-        const nodes = this._getNodes(workflow, triggerType);
-        nodes.forEach(node => {
-          if (this._shouldTrigger(node, triggerType, eventData)) {
-            this._executeWorkflow(workflow, node);
-          }
+    _check(type, data = {}) {
+      this.workflows.forEach(w => {
+        this._nodes(w, type).forEach(n => {
+          if (this._shouldTrigger(n, type, data)) this._exec(w, n);
         });
       });
     },
 
-    _shouldTrigger(node, triggerType, eventData) {
-      const settings = node.data?.settings || {};
-
-      if (triggerType === TRIGGERS.FUNNEL) {
-        return settings.funnelId === eventData.funnel_id && settings.eventType === eventData.event_type;
-      }
-
-      return true;
+    _shouldTrigger(n, type, data) {
+      const s = n.data?.settings || {};
+      return type === T.FUNNEL ? s.funnelId === data.funnel_id && s.eventType === data.event_type : true;
     },
 
-    async _executeWorkflow(workflow, currentNode) {
-      const runId = generateId();
+    async _exec(w, node) {
+      const rid = genId();
+      if (!this._willExec(w)) return;
 
-      // Check if any actions in this workflow will actually execute
-      // Don't track trigger if all actions are frequency-limited
-      const willExecuteAnyAction = this._willWorkflowExecuteActions(workflow);
+      this._track(w, node, 'workflow_trigger', { runId: rid, triggerType: node.data?.title, nodeType: 'trigger' });
 
-      if (!willExecuteAnyAction) {
-        // Don't track trigger or execute workflow if no actions will run
-        return;
-      }
-
-      // Track trigger only if workflow will actually execute
-      this._trackEvent(workflow, currentNode, 'workflow_trigger', {
-        runId,
-        triggerType: currentNode.data?.title,
-        nodeType: 'trigger'
-      });
-
-      let node = currentNode;
-      let workflowExecuted = false;
-
-      while (node) {
-        if (node.data?.type === 'Condition') {
-          const conditionResult = this._evaluateCondition(node);
-          this._trackEvent(workflow, node, 'condition_evaluated', {
-            runId,
-            conditionType: node.data?.title,
-            nodeType: 'condition',
-            result: conditionResult ? 'passed' : 'failed'
-          });
-
-          if (!conditionResult) {
-            this._trackEvent(workflow, node, 'workflow_stopped', {
-              runId,
-              reason: 'condition_failed',
-              nodeType: 'condition'
-            });
+      let n = node, executed = false;
+      while (n) {
+        if (n.data?.type === 'Condition') {
+          const result = this._evalCond(n);
+          this._track(w, n, 'condition_evaluated', { runId: rid, conditionType: n.data?.title, nodeType: 'condition', result: result ? 'passed' : 'failed' });
+          if (!result) {
+            this._track(w, n, 'workflow_stopped', { runId: rid, reason: 'condition_failed', nodeType: 'condition' });
             break;
           }
-        } else if (node.data?.type === 'Action') {
-          const frequencyAllowed = this._checkActionFrequency(node, workflow);
-
-          if (frequencyAllowed) {
-            workflowExecuted = true;
-
-            this._trackEvent(workflow, node, 'action_started', {
-              runId,
-              actionType: node.data?.title,
-              nodeType: 'action',
-              frequency: node.data?.settings?.frequency || 'every_trigger'
-            });
-
+        } else if (n.data?.type === 'Action') {
+          if (this._checkFreq(n, w)) {
+            executed = true;
+            this._track(w, n, 'action_started', { runId: rid, actionType: n.data?.title, nodeType: 'action', frequency: n.data?.settings?.frequency || 'every_trigger' });
             try {
-              await this._executeAction(node, workflow);
-              this._recordActionExecution(node, workflow);
-
-              this._trackEvent(workflow, node, 'action_completed', {
-                runId,
-                actionType: node.data?.title,
-                nodeType: 'action',
-                status: 'success'
-              });
-            } catch (error) {
-              this._trackEvent(workflow, node, 'action_failed', {
-                runId,
-                actionType: node.data?.title,
-                nodeType: 'action',
-                status: 'error',
-                error: error.message
-              });
+              await this._execAction(n, w);
+              this._record(n, w);
+              this._track(w, n, 'action_completed', { runId: rid, actionType: n.data?.title, nodeType: 'action', status: 'success' });
+            } catch (e) {
+              this._track(w, n, 'action_failed', { runId: rid, actionType: n.data?.title, nodeType: 'action', status: 'error', error: e.message });
             }
-          } else {
-            // Don't track skipped actions for frequency limits
-            // This prevents unnecessary database entries
           }
         }
-
-        node = this._getNextNode(workflow, node);
+        n = this._next(w, n);
       }
 
-      // Only track completion if workflow actually executed
-      if (workflowExecuted) {
-        this._trackEvent(workflow, null, 'workflow_completed', {
-          runId,
-          totalNodes: workflow.nodes?.length || 0
-        });
-      }
+      if (executed) this._track(w, null, 'workflow_completed', { runId: rid, totalNodes: w.nodes?.length || 0 });
     },
 
-    // Check if any actions in the workflow will execute (not frequency-limited)
-    _willWorkflowExecuteActions(workflow) {
+    _willExec(w) {
       try {
-        const actionNodes = workflow.nodes?.filter(n => n.data?.type === 'Action') || [];
-
-        // If no actions, workflow won't execute anything meaningful
-        if (actionNodes.length === 0) {
-          return false;
-        }
-
-        // Check if at least one action will execute
-        return actionNodes.some(actionNode => {
-          return this._checkActionFrequency(actionNode, workflow);
-        });
-      } catch (error) {
-        console.warn('[Seentics] Error checking workflow execution:', error);
-        return true; // Default to allowing execution on error
-      }
-    },
-
-    _checkActionFrequency(actionNode, workflow) {
-      try {
-        const frequency = actionNode.data?.settings?.frequency || FREQUENCY_TYPES.ONCE_PER_SESSION;
-
-        if (frequency === FREQUENCY_TYPES.EVERY_TRIGGER) {
-          return true;
-        }
-
-        // Create unique key for this action
-        const actionKey = `seentics_action_${workflow.id}_${actionNode.id}`;
-
-        if (frequency === FREQUENCY_TYPES.ONCE_PER_SESSION) {
-          const sessionKey = `session_${actionKey}`;
-          const executed = sessionStorage.get(sessionKey);
-          return !executed || executed !== 'true';
-        }
-
-        if (frequency === FREQUENCY_TYPES.ONCE_EVER) {
-          const permanentKey = `permanent_${actionKey}`;
-          const executed = storage.get(permanentKey);
-          return !executed || executed !== 'true';
-        }
-
+        const actions = w.nodes?.filter(n => n.data?.type === 'Action') || [];
+        return actions.length > 0 && actions.some(a => this._checkFreq(a, w));
+      } catch (e) {
         return true;
-      } catch (error) {
-        console.warn('[Seentics] Action frequency check error:', error);
-        return true; // Default to allowing execution on error
       }
     },
 
-    _recordActionExecution(actionNode, workflow) {
+    _checkFreq(n, w) {
       try {
-        const frequency = actionNode.data?.settings?.frequency || FREQUENCY_TYPES.EVERY_TRIGGER;
+        const freq = n.data?.settings?.frequency || F.ONCE_PER_SESSION;
+        if (freq === F.EVERY_TRIGGER) return true;
 
-        if (frequency === FREQUENCY_TYPES.EVERY_TRIGGER) {
-          return;
+        const key = `seentics_action_${w.id}_${n.id}`;
+        if (freq === F.ONCE_PER_SESSION) {
+          const sk = `session_${key}`;
+          return sessionStorage.get(sk) !== 'true';
         }
-
-        // Create unique key for this action
-        const actionKey = `seentics_action_${workflow.id}_${actionNode.id}`;
-        const timestamp = new Date().toISOString();
-
-        if (frequency === FREQUENCY_TYPES.ONCE_PER_SESSION) {
-          const sessionKey = `session_${actionKey}`;
-          sessionStorage.set(sessionKey, 'true');
-          sessionStorage.set(`${sessionKey}_timestamp`, timestamp);
+        if (freq === F.ONCE_EVER) {
+          const pk = `permanent_${key}`;
+          return storage.get(pk) !== 'true';
         }
-
-        if (frequency === FREQUENCY_TYPES.ONCE_EVER) {
-          const permanentKey = `permanent_${actionKey}`;
-          storage.set(permanentKey, 'true');
-          storage.set(`${permanentKey}_timestamp`, timestamp);
-        }
-      } catch (error) {
-        console.warn('[Seentics] Action execution recording error:', error);
+        return true;
+      } catch (e) {
+        return true;
       }
     },
 
-    _evaluateCondition(node) {
-      const type = node.data?.title;
-      const settings = node.data?.settings || {};
+    _record(n, w) {
+      try {
+        const freq = n.data?.settings?.frequency || F.EVERY_TRIGGER;
+        if (freq === F.EVERY_TRIGGER) return;
+
+        const key = `seentics_action_${w.id}_${n.id}`;
+        const ts = new Date().toISOString();
+
+        if (freq === F.ONCE_PER_SESSION) {
+          const sk = `session_${key}`;
+          sessionStorage.set(sk, 'true');
+          sessionStorage.set(`${sk}_timestamp`, ts);
+        }
+        if (freq === F.ONCE_EVER) {
+          const pk = `permanent_${key}`;
+          storage.set(pk, 'true');
+          storage.set(`${pk}_timestamp`, ts);
+        }
+      } catch (e) { }
+    },
+
+    _evalCond(n) {
+      const type = n.data?.title;
+      const s = n.data?.settings || {};
 
       switch (type) {
-        case CONDITIONS.URL_PATH:
-          return window.location.pathname.includes(settings.url || '');
-        case CONDITIONS.TRAFFIC_SOURCE:
-          return document.referrer.includes(settings.referrerUrl || '');
-        case CONDITIONS.NEW_VS_RETURNING:
-          return settings.visitorType === (this.isReturningVisitor ? 'returning' : 'new');
-        case CONDITIONS.DEVICE:
-          return this._evaluateDeviceCondition(settings);
-        default:
-          return true;
+        case C.URL_PATH: return location.pathname.includes(s.url || '');
+        case C.TRAFFIC_SOURCE: return document.referrer.includes(s.referrerUrl || '');
+        case C.NEW_VS_RETURNING: return s.visitorType === (this.isReturning ? 'returning' : 'new');
+        case C.DEVICE: return this._evalDevice(s);
+        default: return true;
       }
     },
 
-    _evaluateDeviceCondition(settings) {
-      const currentDevice = getDeviceType();
-
-      // Check basic device type match
-      if (settings.deviceType && settings.deviceType !== 'Any' && settings.deviceType !== currentDevice) {
-        return false;
+    _evalDevice(s) {
+      const dev = getDevice();
+      if (s.deviceType && s.deviceType !== 'Any' && s.deviceType !== dev) return false;
+      if (s.minScreenWidth && screen.width < s.minScreenWidth) return false;
+      if (s.maxScreenWidth && screen.width > s.maxScreenWidth) return false;
+      if (s.touchSupport) {
+        const touch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        if (s.touchSupport === 'touch' && !touch) return false;
+        if (s.touchSupport === 'no-touch' && touch) return false;
       }
-
-      // Check screen size constraints if specified
-      if (settings.minScreenWidth && window.screen.width < settings.minScreenWidth) {
-        return false;
-      }
-      if (settings.maxScreenWidth && window.screen.width > settings.maxScreenWidth) {
-        return false;
-      }
-
-      // Check touch support if specified
-      if (settings.touchSupport) {
-        const hasTouchSupport = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-        if (settings.touchSupport === 'touch' && !hasTouchSupport) {
-          return false;
-        }
-        if (settings.touchSupport === 'no-touch' && hasTouchSupport) {
-          return false;
-        }
-      }
-
       return true;
     },
 
-    async _executeAction(node, workflow) {
-      const type = node.data?.title;
-      const settings = node.data?.settings || {};
+    async _execAction(n, w) {
+      const type = n.data?.title;
+      const s = n.data?.settings || {};
 
-      if (node.data?.isServerAction) {
-        this._executeServerAction(node, workflow.id);
+      if (n.data?.isServerAction) {
+        this._execServer(n, w.id);
         return;
       }
 
       switch (type) {
-        case ACTIONS.SHOW_MODAL:
-          this._showModal(settings);
-          break;
-        case ACTIONS.SHOW_BANNER:
-          this._showBanner(settings);
-          break;
-        case ACTIONS.SHOW_NOTIFICATION:
-          this._showNotification(settings);
-          break;
-        case ACTIONS.REDIRECT_URL:
-          if (settings.redirectUrl) window.location.href = settings.redirectUrl;
-          break;
-        case ACTIONS.TRACK_EVENT:
-          if (settings.eventName && window.seentics?.track) {
-            window.seentics.track(settings.eventName);
-          }
-          break;
-        case ACTIONS.WEBHOOK:
-          this._executeWebhook(settings);
-          break;
+        case A.SHOW_MODAL: this._modal(s); break;
+        case A.SHOW_BANNER: this._banner(s); break;
+        case A.SHOW_NOTIFICATION: this._notify(s); break;
+        case A.REDIRECT_URL: if (s.redirectUrl) location.href = s.redirectUrl; break;
+        case A.TRACK_EVENT: if (s.eventName && window.seentics?.track) window.seentics.track(s.eventName); break;
+        case A.WEBHOOK: this._webhook(s); break;
       }
     },
 
-    _executeServerAction(node, workflowId) {
-      const payload = {
-        workflowId,
-        nodeId: node.id,
-        siteId: this.siteId,
-        visitorId: this.visitorId
-      };
-
-      fetch(`${this._getApiHost()}/api/v1/workflows/execution/action`, {
+    _execServer(n, wid) {
+      fetch(`${this._getHost()}/api/v1/workflows/execution/action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        credentials: 'omit', // Explicitly omit credentials for public tracking
+        body: JSON.stringify({ workflowId: wid, nodeId: n.id, siteId: this.siteId, visitorId: this.visitorId }),
+        credentials: 'omit',
         keepalive: true
-      }).catch(error => console.warn('[Seentics] Server action failed:', error));
+      }).catch(() => { });
     },
 
-    _getNextNode(workflow, currentNode) {
-      const edge = workflow.edges?.find(e => e.source === currentNode.id);
-      return edge ? workflow.nodes?.find(n => n.id === edge.target) : null;
+    _next(w, n) {
+      const edge = w.edges?.find(e => e.source === n.id);
+      return edge ? w.nodes?.find(x => x.id === edge.target) : null;
     },
 
-    _showModal(settings) {
-      if (!settings.modalTitle && !settings.modalContent) return;
+    _modal(s) {
+      if (!s.modalTitle && !s.modalContent && !s.customHtml) return;
+      if (s.displayMode === 'custom' && s.customHtml) return this._customModal(s);
 
       const overlay = document.createElement('div');
       overlay.className = 'seentics-overlay';
-
       const modal = document.createElement('div');
       modal.className = 'seentics-modal';
 
-      if (settings.modalTitle) {
-        const title = document.createElement('h2');
-        title.textContent = settings.modalTitle;
-        modal.appendChild(title);
+      if (s.modalTitle) {
+        const t = document.createElement('h2');
+        t.textContent = s.modalTitle;
+        modal.appendChild(t);
+      }
+      if (s.modalContent) {
+        const c = document.createElement('p');
+        c.textContent = s.modalContent;
+        modal.appendChild(c);
       }
 
-      if (settings.modalContent) {
-        const content = document.createElement('p');
-        content.textContent = settings.modalContent;
-        modal.appendChild(content);
-      }
-
-      const closeBtn = document.createElement('button');
-      closeBtn.innerHTML = '×';
-      closeBtn.className = 'seentics-close-button';
-      closeBtn.onclick = () => document.body.removeChild(overlay);
-      modal.appendChild(closeBtn);
+      const close = document.createElement('button');
+      close.innerHTML = '×';
+      close.className = 'seentics-close-button';
+      close.onclick = () => document.body.removeChild(overlay);
+      modal.appendChild(close);
 
       overlay.appendChild(modal);
       document.body.appendChild(overlay);
-
-      overlay.onclick = (e) => {
-        if (e.target === overlay) document.body.removeChild(overlay);
-      };
+      overlay.onclick = e => { if (e.target === overlay) document.body.removeChild(overlay); };
     },
 
-    _showBanner(settings) {
-      if (!settings.bannerContent) return;
+    _customModal(s) {
+      if (document.querySelector('.seentics-custom-modal-container')) return;
+
+      const cont = document.createElement('div');
+      cont.className = 'seentics-custom-modal-container';
+      cont.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:999999;';
+
+      if (s.customCss) {
+        const style = document.createElement('style');
+        style.id = 'seentics-custom-modal-styles';
+        style.textContent = s.customCss;
+        document.getElementById('seentics-custom-modal-styles')?.remove();
+        document.head.appendChild(style);
+      }
+
+      if (s.customHtml) {
+        let html = s.customHtml;
+        const modalMatch = html.match(/<div[^>]*class="[^"]*exit-overlay[^"]*"[^>]*>[\s\S]*?<\/div>/i);
+        if (modalMatch) {
+          html = modalMatch[0];
+        } else {
+          const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+          if (bodyMatch) html = bodyMatch[1].replace(/<h1[^>]*>.*?<\/h1>/gi, '').replace(/<p>(?!.*modal).*?<\/p>/gi, '').replace(/Scroll around.*?modal will show up\./gi, '').replace(/My Page Content/gi, '');
+        }
+        cont.innerHTML = html;
+      }
+
+      document.body.appendChild(cont);
+
+      window.seenticsCloseModal = () => {
+        cont.parentNode?.removeChild(cont);
+        document.querySelectorAll('.seentics-custom-modal-container').forEach(c => c.parentNode?.removeChild(c));
+        document.getElementById('seentics-custom-modal-styles')?.remove();
+        document.body.style.overflow = '';
+        document.documentElement.style.overflow = '';
+      };
+
+      setTimeout(() => {
+        const overlay = cont.querySelector('#exitOverlay, .exit-overlay');
+        if (overlay) overlay.addEventListener('click', e => { if (e.target === overlay) window.seenticsCloseModal(); });
+      }, 100);
+
+      if (s.customJs) {
+        try {
+          const script = document.createElement('script');
+          script.textContent = `(function(){const modalContainer=document.querySelector('.seentics-custom-modal-container');const exitOverlay=modalContainer?modalContainer.querySelector('#exitOverlay'):null;const exitClose=modalContainer?modalContainer.querySelector('#exitClose'):null;if(exitClose){exitClose.addEventListener('click',()=>{if(window.seenticsCloseModal){window.seenticsCloseModal();}});}${s.customJs}})();`;
+          document.body.appendChild(script);
+          setTimeout(() => script.parentNode?.removeChild(script), 100);
+        } catch (e) { }
+      }
+    },
+
+    _banner(s) {
+      if (!s.bannerContent && !s.customHtml) return;
+      if (s.displayMode === 'custom' && s.customHtml) return this._customBanner(s);
 
       const banner = document.createElement('div');
-      banner.className = `seentics-banner ${settings.bannerPosition === 'bottom' ? 'seentics-banner-bottom' : 'seentics-banner-top'}`;
-
+      banner.className = `seentics-banner ${s.bannerPosition === 'bottom' ? 'seentics-banner-bottom' : 'seentics-banner-top'}`;
       const content = document.createElement('div');
       content.className = 'seentics-banner-content';
-      content.innerHTML = `<p>${settings.bannerContent}</p>`;
+      content.innerHTML = `<p>${s.bannerContent}</p>`;
       banner.appendChild(content);
 
-      const closeBtn = document.createElement('button');
-      closeBtn.innerHTML = '×';
-      closeBtn.className = 'seentics-close-button';
-      closeBtn.onclick = () => document.body.removeChild(banner);
-      banner.appendChild(closeBtn);
+      const close = document.createElement('button');
+      close.innerHTML = '×';
+      close.className = 'seentics-close-button';
+      close.onclick = () => document.body.removeChild(banner);
+      banner.appendChild(close);
 
       document.body.appendChild(banner);
     },
 
-    _showNotification(settings) {
-      if (!settings.notificationMessage) return;
+    _customBanner(s) {
+      if (document.querySelector('.seentics-custom-banner-container')) return;
 
-      // Create notification container
-      const notification = document.createElement('div');
-      const position = settings.notificationPosition || 'top-right';
-      const type = settings.notificationType || 'info';
+      const cont = document.createElement('div');
+      cont.className = 'seentics-custom-banner-container';
+      const pos = s.bannerPosition === 'bottom' ? 'bottom:0;' : 'top:0;';
+      cont.style.cssText = `position:fixed;left:0;width:100%;${pos}z-index:999998;`;
 
-      notification.className = `seentics-notification ${position} ${type}`;
+      if (s.customCss) {
+        const style = document.createElement('style');
+        style.id = 'seentics-custom-banner-styles';
+        style.textContent = s.customCss;
+        document.getElementById('seentics-custom-banner-styles')?.remove();
+        document.head.appendChild(style);
+      }
 
-      // Icon mapping
-      const icons = {
-        success: '✓',
-        error: '✕',
-        warning: '⚠',
-        info: 'ℹ'
+      if (s.customHtml) {
+        let html = s.customHtml;
+        const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+        if (bodyMatch) html = bodyMatch[1];
+        cont.innerHTML = html;
+      }
+
+      document.body.appendChild(cont);
+
+      window.seenticsCloseBanner = () => {
+        cont.parentNode?.removeChild(cont);
+        document.getElementById('seentics-custom-banner-styles')?.remove();
       };
 
-      // Icon
-      if (settings.showIcon !== false) {
-        const iconSpan = document.createElement('span');
-        iconSpan.className = 'notification-icon';
-        iconSpan.textContent = icons[type] || icons.info;
-        notification.appendChild(iconSpan);
-      }
-
-      // Message
-      const message = document.createElement('span');
-      message.className = 'notification-message';
-      message.textContent = settings.notificationMessage;
-      notification.appendChild(message);
-
-      // Close button (optional)
-      if (settings.showCloseButton !== false) {
-        const closeBtn = document.createElement('button');
-        closeBtn.innerHTML = '×';
-        closeBtn.className = 'notification-close';
-        closeBtn.onclick = () => this._removeNotification(notification);
-        notification.appendChild(closeBtn);
-      }
-
-      // Add to DOM
-      document.body.appendChild(notification);
-
-      // Auto-remove after duration (default 5 seconds)
-      const duration = settings.notificationDuration || 5000;
-      if (duration > 0) {
-        setTimeout(() => {
-          if (notification.parentNode) {
-            this._removeNotification(notification);
-          }
-        }, duration);
-      }
-
-      // Click to dismiss (optional)
-      if (settings.clickToDismiss !== false) {
-        notification.classList.add('clickable');
-        notification.onclick = () => this._removeNotification(notification);
+      if (s.customJs) {
+        try {
+          const script = document.createElement('script');
+          script.textContent = `(function(){const bannerContainer=document.querySelector('.seentics-custom-banner-container');${s.customJs}})();`;
+          document.body.appendChild(script);
+          setTimeout(() => script.parentNode?.removeChild(script), 100);
+        } catch (e) { }
       }
     },
 
-    _removeNotification(notification) {
-      if (!notification.parentNode) return;
+    _notify(s) {
+      if (!s.notificationMessage) return;
 
-      notification.classList.add('slide-out');
-      setTimeout(() => {
-        if (notification.parentNode) {
-          notification.parentNode.removeChild(notification);
-        }
-      }, 300);
+      const notif = document.createElement('div');
+      const pos = s.notificationPosition || 'top-right';
+      const type = s.notificationType || 'info';
+      notif.className = `seentics-notification ${pos} ${type}`;
+
+      const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
+
+      if (s.showIcon !== false) {
+        const icon = document.createElement('span');
+        icon.className = 'notification-icon';
+        icon.textContent = icons[type] || icons.info;
+        notif.appendChild(icon);
+      }
+
+      const msg = document.createElement('span');
+      msg.className = 'notification-message';
+      msg.textContent = s.notificationMessage;
+      notif.appendChild(msg);
+
+      if (s.showCloseButton !== false) {
+        const close = document.createElement('button');
+        close.innerHTML = '×';
+        close.className = 'notification-close';
+        close.onclick = () => this._removeNotif(notif);
+        notif.appendChild(close);
+      }
+
+      document.body.appendChild(notif);
+
+      const dur = s.notificationDuration || 5000;
+      if (dur > 0) setTimeout(() => { if (notif.parentNode) this._removeNotif(notif); }, dur);
+
+      if (s.clickToDismiss !== false) {
+        notif.classList.add('clickable');
+        notif.onclick = () => this._removeNotif(notif);
+      }
     },
 
-    _executeWebhook(settings) {
-      if (!settings.webhookUrl) return;
+    _removeNotif(n) {
+      if (!n.parentNode) return;
+      n.classList.add('slide-out');
+      setTimeout(() => n.parentNode?.removeChild(n), 300);
+    },
 
-      const payload = {
-        siteId: this.siteId,
-        visitorId: this.visitorId,
-        sessionId: this.sessionId,
-        timestamp: new Date().toISOString(),
-        url: window.location.href,
-        userAgent: navigator.userAgent,
-        ...(settings.webhookData || {})
-      };
-
-      fetch(settings.webhookUrl, {
-        method: settings.webhookMethod || 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(settings.webhookHeaders || {})
-        },
-        body: JSON.stringify(payload),
+    _webhook(s) {
+      if (!s.webhookUrl) return;
+      fetch(s.webhookUrl, {
+        method: s.webhookMethod || 'POST',
+        headers: { 'Content-Type': 'application/json', ...(s.webhookHeaders || {}) },
+        body: JSON.stringify({
+          siteId: this.siteId,
+          visitorId: this.visitorId,
+          sessionId: this.sessionId,
+          timestamp: new Date().toISOString(),
+          url: location.href,
+          userAgent: navigator.userAgent,
+          ...(s.webhookData || {})
+        }),
         keepalive: true
-      }).catch(error => console.warn('[Seentics] Webhook failed:', error));
+      }).catch(() => { });
     },
 
-    _trackEvent(workflow, node, eventType, options = {}) {
-      // Optimized payload - only essential data
-      const payload = {
-        w: this.siteId,           // website_id (shortened)
-        v: this.visitorId,        // visitor_id (shortened)
-        s: this.sessionId,        // session_id (shortened)
-        t: 'wf',                  // event_type (shortened)
-        wf: workflow.id,          // workflow_id (shortened)
-        n: node?.id || null,      // node_id (shortened)
-        e: eventType,             // analytics_event_type (shortened)
-        ts: Date.now()            // timestamp as number (more efficient)
+    _track(w, n, evt, opts = {}) {
+      const p = {
+        w: this.siteId,
+        v: this.visitorId,
+        s: this.sessionId,
+        t: 'wf',
+        wf: w.id,
+        n: n?.id || null,
+        e: evt,
+        ts: Date.now()
       };
-
-      // Only include optional data if it exists and is meaningful
-      if (node?.data?.title && eventType !== 'workflow_trigger') {
-        payload.nt = node.data.title; // node_title (shortened)
-      }
-
-      // Only include specific options that are actually needed
-      if (options.result) payload.r = options.result;
-      if (options.status && options.status !== 'success') payload.st = options.status;
-      if (options.error) payload.err = options.error.substring(0, 100); // Truncate errors
-
-      // Send workflow analytics only to workflow service
-      this.analytics.addEvent(payload);
+      if (n?.data?.title && evt !== 'workflow_trigger') p.nt = n.data.title;
+      if (opts.result) p.r = opts.result;
+      if (opts.status && opts.status !== 'success') p.st = opts.status;
+      if (opts.error) p.err = opts.error.substring(0, 100);
+      this.analytics.add(p);
     },
 
     destroy() {
-      // Clear all timers
-      this.timers.forEach(timer => clearTimeout(timer));
+      this.timers.forEach(t => clearTimeout(t));
       this.timers.clear();
-
-      // Remove all event listeners
-      this.listeners.forEach(cleanup => cleanup());
+      this.listeners.forEach(c => c());
       this.listeners.clear();
-
-      // Clean up analytics
-      if (this.analytics) {
-        this.analytics.destroy();
-        this.analytics = null;
-      }
-
-      // Reset state
-      this.activeWorkflows = [];
+      if (this.analytics) { this.analytics.destroy(); this.analytics = null; }
+      this.workflows = [];
       this.siteId = null;
       this.visitorId = null;
     }
   };
 
-  // Auto-initialize if siteId is provided
-  const siteId = window.SEENTICS_SITE_ID || document.currentScript?.getAttribute('data-site-id');
-  if (siteId) {
+  // Auto-init
+  const sid = window.SEENTICS_SITE_ID || document.currentScript?.getAttribute('data-site-id');
+  if (sid) {
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => workflowTracker.init(siteId));
+      document.addEventListener('DOMContentLoaded', () => WT.init(sid));
     } else {
-      workflowTracker.init(siteId);
+      WT.init(sid);
     }
   }
 
-  // Expose to global scope
+  // Expose
   window.seentics = window.seentics || {};
-  window.seentics.workflowTracker = workflowTracker;
+  window.seentics.workflowTracker = WT;
 
-  // Global funnel trigger helper
-  window.triggerFunnelEvent = (funnelId, eventType, stepIndex = 0, data = {}) => {
+  window.triggerFunnelEvent = (fid, evt, step = 0, data = {}) => {
     document.dispatchEvent(new CustomEvent('seentics:funnel-event', {
-      detail: { funnel_id: funnelId, event_type: eventType, step_index: stepIndex, ...data }
+      detail: { funnel_id: fid, event_type: evt, step_index: step, ...data }
     }));
   };
 
-  // Cleanup on page unload
-  window.addEventListener('beforeunload', () => {
-    workflowTracker.destroy();
-  });
+  window.addEventListener('beforeunload', () => WT.destroy());
 
 })();

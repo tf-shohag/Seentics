@@ -11,8 +11,6 @@ export type Workflow = {
   category: string;
   siteId: string;
   userId: string;
-  totalTriggers: number;
-  totalCompletions: number;
   completionRate: string; // This is now a string like "50.0%" from the backend
   createdAt: string;
   nodes: Node<CustomNodeData>[];

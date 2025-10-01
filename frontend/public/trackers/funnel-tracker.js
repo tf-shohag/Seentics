@@ -1,65 +1,42 @@
-(function (doc) {
+(function (d) {
   'use strict';
 
-  // --- Seentics Funnel Tracker v1.0.2 (Fixed & Optimized) ---
-  // Fixed: Syntax errors, race conditions, performance issues, memory leaks
+  // --- Seentics Funnel Tracker v1.0.3 (Optimized) ---
 
-  const DEBUG = window.location.hostname === 'localhost';
+  const DBG = location.hostname === 'localhost';
+  const script = d.currentScript;
+  let siteId = script?.getAttribute('data-site-id') || d.querySelector('script[data-site-id]')?.getAttribute('data-site-id') || window.seentics?.siteId || window.SEENTICS_SITE_ID;
 
-  // Get site ID from script tag or global variables
-  const scriptTag = doc.currentScript;
-  let siteId = scriptTag?.getAttribute('data-site-id') ||
-    doc.querySelector('script[data-site-id]')?.getAttribute('data-site-id') ||
-    window.seentics?.siteId ||
-    window.SEENTICS_SITE_ID;
   if (!siteId) {
-    if (DEBUG) console.warn('Seentics Funnel: No site ID provided');
+    if (DBG) console.warn('Seentics Funnel: No site ID');
     return;
   }
 
-  // Use shared constants and utilities
-  const SHARED = window.SEENTICS_SHARED || {};
-  const STORAGE_KEYS = SHARED.STORAGE_KEYS || {
-    VISITOR_ID: 'seentics_visitor_id',
-    SESSION_ID: 'seentics_session_id'
-  };
-  const TIME_CONSTANTS = SHARED.TIME_CONSTANTS || {
-    VISITOR_EXPIRY_MS: 30 * 24 * 60 * 60 * 1000, // 30 days
-    SESSION_EXPIRY_MS: 30 * 60 * 1000, // 30 minutes
-    BATCH_DELAY: 1000
-  };
+  // Shared constants
+  const S = window.SEENTICS_SHARED || {};
+  const K = S.STORAGE_KEYS || { VISITOR_ID: 'seentics_visitor_id', SESSION_ID: 'seentics_session_id' };
+  const T = S.TIME_CONSTANTS || { VISITOR_EXPIRY_MS: 2592000000, SESSION_EXPIRY_MS: 1800000, BATCH_DELAY: 1000 };
 
-  // Configuration using shared utilities
-  const apiHost = SHARED.SharedUtils?.getApiHost() ||
-    (window.SEENTICS_CONFIG?.apiHost ||
-      (window.location.hostname === 'localhost' ? 'http://localhost:8080' : 'https://api.seentics.com'));
-  const FUNNEL_API_ENDPOINT = `${apiHost}/api/v1/funnels/track`;
+  const apiHost = S.SharedUtils?.getApiHost() || (window.SEENTICS_CONFIG?.apiHost || (location.hostname === 'localhost' ? 'http://localhost:8080' : 'https://api.seentics.com'));
+  const API = `${apiHost}/api/v1/funnels/track`;
+  const trackEnabled = (script?.getAttribute('data-track-funnels') || '').toLowerCase() !== 'false';
+  const STATE_KEY = 'seentics_funnel_state';
 
-  // Feature flags
-  const trackFunnels = (scriptTag?.getAttribute('data-track-funnels') || '').toLowerCase() !== 'false';
-
-  // Funnel-specific constants
-  const FUNNEL_STATE_KEY = 'seentics_funnel_state';
-
-  // Use shared utilities
-  const getOrCreateId = (key, expiryMs) => {
-    // Use shared storage utilities if available
-    const storage = SHARED.SharedUtils?.safeLocalStorage;
+  // Get or create ID
+  const getId = (key, exp) => {
+    const storage = S.SharedUtils?.safeLocalStorage;
     if (storage) {
       try {
         let id = storage.get(key);
         if (!id) {
-          id = SHARED.SharedUtils.generateId();
+          id = S.SharedUtils.generateId();
           storage.set(key, id);
         }
         return id;
       } catch (e) {
-        console.warn('Seentics Funnel: Storage error:', e);
-        return SHARED.SharedUtils.generateId();
+        return S.SharedUtils.generateId();
       }
     }
-
-    // Fallback implementation
     try {
       let id = localStorage.getItem(key);
       if (!id) {
@@ -68,644 +45,467 @@
       }
       return id;
     } catch (e) {
-      console.warn('Seentics Funnel: Storage error:', e);
       return Date.now().toString(36) + Math.random().toString(36).substring(2);
     }
   };
 
-  // Use shared throttle/debounce utilities
-  const debounce = SHARED.SharedUtils?.throttle || ((func, delay) => {
-    let timeoutId;
+  // Debounce utility
+  const debounce = S.SharedUtils?.throttle || ((fn, delay) => {
+    let timer;
     return (...args) => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => func.apply(null, args), delay);
+      clearTimeout(timer);
+      timer = setTimeout(() => fn.apply(null, args), delay);
     };
   });
 
   // State
-  let visitorId = getOrCreateId(STORAGE_KEYS.VISITOR_ID, TIME_CONSTANTS.VISITOR_EXPIRY_MS);
-  let sessionId = getOrCreateId(STORAGE_KEYS.SESSION_ID, TIME_CONSTANTS.SESSION_EXPIRY_MS);
-  let activeFunnels = new Map();
-  let funnelEventQueue = [];
-  let funnelEventTimer = null;
-  let funnelsValidated = false;
-  let currentUrl = window.location.pathname;
-  let throttledClickHandler = null; // Store reference for cleanup
+  let vid = getId(K.VISITOR_ID, T.VISITOR_EXPIRY_MS);
+  let sid = getId(K.SESSION_ID, T.SESSION_EXPIRY_MS);
+  let funnels = new Map();
+  let queue = [];
+  let timer = null;
+  let validated = false;
+  let url = location.pathname;
+  let clickHandler = null;
 
+  // --- Core Functions ---
 
-  // --- Funnel Tracking Functions ---
-
-  async function initFunnelTracking() {
-    if (!trackFunnels || !siteId) {
-      return;
-    }
-
-    await loadFunnelDefinitions();
-    startFunnelMonitoring();
+  async function init() {
+    if (!trackEnabled || !siteId) return;
+    await loadFunnels();
+    startMonitoring();
   }
 
-  async function loadFunnelDefinitions() {
+  async function loadFunnels() {
     try {
-
-      // Load from cache first
-      const cacheKey = `${FUNNEL_STATE_KEY}_${siteId}`;
-      const cacheTimestampKey = `${cacheKey}_timestamp`;
-      const storage = SHARED.SharedUtils?.safeLocalStorage || {
-        get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
-        set: (k, v) => { try { localStorage.setItem(k, v); return true; } catch { return false; } }
-      };
-      const savedFunnels = storage.get(cacheKey);
-      const cacheTimestamp = storage.get(cacheTimestampKey);
-
-      // Check if cache is still valid (1 hour)
-      const cacheAge = Date.now() - (parseInt(cacheTimestamp) || 0);
-      const cacheValid = cacheAge < 3600000; // 1 hour
-
-      if (savedFunnels && cacheValid) {
-        try {
-          const funnels = JSON.parse(savedFunnels);
-          // Only load essential funnel data, not full definitions
-          const lightweightFunnels = funnels.map(f => ({
-            id: f.id,
-            name: f.name,
-            steps: f.steps?.map(s => ({ url: s.url, event: s.event })) || [],
-            isActive: f.isActive
-          }));
-          initializeFunnels(lightweightFunnels);
-          funnelsValidated = true; // Mark as validated to avoid server call
-          return;
-        } catch (error) {
-          console.warn('🔍 Seentics: Error loading cached funnels:', error);
-        }
-      }
-
-      // Fetch from API - Use analytics service public endpoint for funnel tracking
       const apiUrl = `${apiHost}/api/v1/funnels/active?website_id=${siteId}`;
-      if (DEBUG) console.log('🔍 Seentics: Fetching funnels from analytics service:', apiUrl);
+      if (DBG) console.log('🔍 Fetching funnels:', apiUrl);
 
-      // For public funnel tracking, we don't need authentication
-      const response = await fetch(apiUrl, {
+      const res = await fetch(apiUrl, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'omit', // Explicitly omit credentials for public tracking
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'omit',
         keepalive: true
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        // Handle null response (no funnels), direct array response, and wrapped response
-        const funnels = data === null ? [] : (Array.isArray(data) ? data : (data && data.funnels ? data.funnels : (data && data.data ? data.data : [])));
+      if (res.ok) {
+        const data = await res.json();
+        const list = data === null ? [] : (Array.isArray(data) ? data : (data?.funnels || data?.data || []));
 
-        if (DEBUG) console.log('🔍 Seentics: API Response:', { status: response.status, data });
-        if (DEBUG) console.log('🔍 Seentics: Extracted funnels:', funnels);
+        if (DBG) console.log('🔍 API Response:', { status: res.status, data });
+        if (DBG) console.log('🔍 Extracted funnels:', list);
 
-        activeFunnels.clear();
-        initializeFunnels(funnels);
+        funnels.clear();
+        initFunnels(list);
+        validated = true;
 
-        storage.set(cacheKey, JSON.stringify(funnels));
-        storage.set(cacheTimestampKey, Date.now().toString());
-        funnelsValidated = true;
-
-        // Trigger initial page check
         setTimeout(() => {
-          if (DEBUG) console.log('🔍 Seentics: Triggering initial page check for:', currentUrl);
-          monitorPageChanges();
+          if (DBG) console.log('🔍 Initial page check:', url);
+          checkPage();
         }, 100);
 
-        if (funnelEventQueue.length > 0) {
-          sendFunnelEvents();
-        }
+        if (queue.length > 0) sendEvents();
       } else {
-        const errorText = await response.text();
-        console.warn('🔍 Seentics: Failed to fetch funnel definitions:', {
-          status: response.status,
-          statusText: response.statusText,
-          url: apiUrl,
-          error: errorText
-        });
+        const err = await res.text();
+        console.warn('🔍 Fetch failed:', { status: res.status, statusText: res.statusText, url: apiUrl, error: err });
       }
-    } catch (error) {
-      console.warn('🔍 Seentics: Error loading funnel definitions:', error);
-      // Initialize with empty array on error to prevent null reference
-      activeFunnels.clear();
-      initializeFunnels([]);
+    } catch (e) {
+      console.warn('🔍 Load error:', e);
+      funnels.clear();
+      initFunnels([]);
     }
   }
 
-  function initializeFunnels(funnels) {
-    if (DEBUG) console.log('🔍 Seentics: Initializing funnels:', funnels);
-
-    if (!Array.isArray(funnels)) {
-      console.warn('🔍 Seentics: Funnels is not an array:', funnels);
+  function initFunnels(list) {
+    if (DBG) console.log('🔍 Initializing funnels:', list);
+    if (!Array.isArray(list)) {
+      console.warn('🔍 Funnels not array:', list);
       return;
     }
 
-    funnels.forEach(funnel => {
-      if (DEBUG) console.log('🔍 Seentics: Processing funnel:', funnel.name, 'Active:', funnel.is_active);
-
-      if (funnel.is_active) {
-        activeFunnels.set(funnel.id, {
-          ...funnel,
+    list.forEach(f => {
+      if (DBG) console.log('🔍 Processing funnel:', f.name, 'Active:', f.is_active);
+      if (f.is_active) {
+        funnels.set(f.id, {
+          ...f,
           currentStep: 0,
           completedSteps: [],
           startedAt: null,
           lastActivity: null,
           converted: false
         });
-
-        if (DEBUG) console.log('🔍 Seentics: Added active funnel:', funnel.id, 'with', funnel.steps?.length || 0, 'steps');
+        if (DBG) console.log('🔍 Added funnel:', f.id, 'with', f.steps?.length || 0, 'steps');
       }
     });
 
-    if (DEBUG) console.log('🔍 Seentics: Total active funnels loaded:', activeFunnels.size);
+    if (DBG) console.log('🔍 Active funnels:', funnels.size);
   }
 
-
-  // Debounced funnel state update to prevent race conditions
-  const debouncedSaveFunnelState = debounce(() => {
+  const saveState = debounce(() => {
     try {
-      const stateToSave = {};
-      activeFunnels.forEach((state, id) => {
-        stateToSave[id] = {
-          currentStep: state.currentStep,
-          completedSteps: state.completedSteps,
-          startedAt: state.startedAt,
-          lastActivity: state.lastActivity?.toISOString?.() || state.lastActivity,
-          converted: state.converted
+      const state = {};
+      funnels.forEach((s, id) => {
+        state[id] = {
+          currentStep: s.currentStep,
+          completedSteps: s.completedSteps,
+          startedAt: s.startedAt,
+          lastActivity: s.lastActivity?.toISOString?.() || s.lastActivity,
+          converted: s.converted
         };
       });
-      const storage = SHARED.SharedUtils?.safeLocalStorage || {
+      const storage = S.SharedUtils?.safeLocalStorage || {
         set: (k, v) => { try { localStorage.setItem(k, v); return true; } catch { return false; } }
       };
-      storage.set(FUNNEL_STATE_KEY, JSON.stringify(stateToSave));
+      storage.set(STATE_KEY, JSON.stringify(state));
     } catch (e) {
-      console.warn('Failed to save funnel state:', e);
+      console.warn('State save failed:', e);
     }
   }, 200);
 
-  function startFunnelMonitoring() {
-    monitorPageChanges();
-    monitorClickEvents();
-    monitorCustomEvents();
+  function startMonitoring() {
+    checkPage();
+    monitorClicks();
+    monitorCustom();
   }
 
-  function monitorPageChanges() {
-    if (DEBUG) console.log('🔍 Seentics: Monitoring page changes for:', currentUrl);
-    if (DEBUG) console.log('🔍 Seentics: Active funnels count:', activeFunnels.size);
+  function checkPage() {
+    if (DBG) console.log('🔍 Checking page:', url);
+    if (DBG) console.log('🔍 Funnels count:', funnels.size);
 
-    let anyFunnelMatched = false;
+    let matched = false;
 
-    activeFunnels.forEach((funnelState, funnelId) => {
-      if (!funnelState.steps) {
-        if (DEBUG) console.log('🔍 Seentics: No steps for funnel:', funnelId);
+    funnels.forEach((state, fid) => {
+      if (!state.steps) {
+        if (DBG) console.log('🔍 No steps:', fid);
         return;
       }
 
-      // Skip checking if user is not currently in this funnel (currentStep = 0)
-      // Only check funnels that are either starting fresh or user is actively progressing through
-      const isInActiveFunnel = funnelState.currentStep > 0;
-      const canStartFunnel = funnelState.currentStep === 0;
+      const isActive = state.currentStep > 0;
+      const canStart = state.currentStep === 0;
 
-      if (DEBUG) console.log(`🔍 Seentics: Checking funnel ${funnelId} - currentStep: ${funnelState.currentStep}, isActive: ${isInActiveFunnel}`);
+      if (DBG) console.log(`🔍 Funnel ${fid} - step: ${state.currentStep}, active: ${isActive}`);
 
-      let foundMatch = false;
+      let found = false;
 
-      funnelState.steps.forEach((step, index) => {
-        const stepNumber = index + 1;
-
+      state.steps.forEach((step, idx) => {
+        const num = idx + 1;
         if (step.type === 'page' && step.condition?.page) {
-          const matches = matchesPageCondition(currentUrl, step.condition.page);
-
-          if (matches) {
-            // Only process if this is step 1 (can start funnel) or user is actively in funnel
-            if (stepNumber === 1 || isInActiveFunnel) {
-              if (DEBUG) console.log(`🎯 Seentics: Page match for funnel ${funnelId}, step ${stepNumber}: ${step.name}`);
-              updateFunnelProgress(funnelId, stepNumber, step);
-              foundMatch = true;
-              anyFunnelMatched = true;
+          const match = matchPage(url, step.condition.page);
+          if (match) {
+            if (num === 1 || isActive) {
+              if (DBG) console.log(`🎯 Page match: funnel ${fid}, step ${num}: ${step.name}`);
+              progress(fid, num, step);
+              found = true;
+              matched = true;
             } else {
-              if (DEBUG) console.log(`🔍 Seentics: Ignoring step ${stepNumber} match - user not in active funnel`);
+              if (DBG) console.log(`🔍 Ignoring step ${num} - not in funnel`);
             }
           }
         }
       });
 
-      // Handle dropoff only if user was actively in this funnel
-      if (!foundMatch && isInActiveFunnel) {
-        if (funnelState.startedAt && (new Date() - new Date(funnelState.startedAt)) > 5000) {
-          // 5 second minimum engagement before considering it a dropoff
-          if (DEBUG) console.log(`🔍 Seentics: User dropped off from funnel ${funnelId} after meaningful engagement`);
-          queueDropoffEvent(funnelId, funnelState);
+      if (!found && isActive) {
+        if (state.startedAt && (new Date() - new Date(state.startedAt)) > 5000) {
+          if (DBG) console.log(`🔍 Dropoff: ${fid}`);
+          queueDropoff(fid, state);
         } else {
-          if (DEBUG) console.log(`🔍 Seentics: User left funnel ${funnelId} too quickly, not counting as dropoff`);
+          if (DBG) console.log(`🔍 Left too quickly: ${fid}`);
         }
-
-        // Reset funnel state when user visits non-funnel pages
-        funnelState.currentStep = 0;
-        funnelState.completedSteps = [];
-        funnelState.startedAt = null;
-        funnelState.converted = false;
-        activeFunnels.set(funnelId, funnelState);
-        saveFunnelState();
+        state.currentStep = 0;
+        state.completedSteps = [];
+        state.startedAt = null;
+        state.converted = false;
+        funnels.set(fid, state);
+        saveState();
       }
     });
 
-    // Only log if there was actually a funnel match
-    if (DEBUG && !anyFunnelMatched) {
-      console.log('🔍 Seentics: No funnel matches found for current page, no API calls needed');
-    }
+    if (DBG && !matched) console.log('🔍 No matches, no API calls');
   }
 
-  function queueDropoffEvent(funnelId, funnelState) {
-    const dropoffEvent = createFunnelEvent(funnelId, funnelState, {
-      step_name: funnelState.steps[funnelState.currentStep - 1]?.name || 'Unknown',
-      step_type: funnelState.steps[funnelState.currentStep - 1]?.type || 'page',
+  function queueDropoff(fid, state) {
+    const evt = createEvent(fid, state, {
+      step_name: state.steps[state.currentStep - 1]?.name || 'Unknown',
+      step_type: state.steps[state.currentStep - 1]?.type || 'page',
       dropoff_reason: "navigated_to_unexpected_page",
       event_type: "dropoff"
     });
-
-    funnelEventQueue.push(dropoffEvent);
-    sendFunnelEvents();
+    queue.push(evt);
+    sendEvents();
   }
 
-  function monitorClickEvents() {
-    // Use shared throttle utility for click events
-    const throttle = SHARED.SharedUtils?.throttle || debounce;
-    throttledClickHandler = throttle((e) => {
-      const element = e.target;
-
-      activeFunnels.forEach((funnelState, funnelId) => {
-        if (!funnelState.steps) return;
-
-        funnelState.steps.forEach((step, index) => {
-          if (step.type === 'event' && step.condition?.event &&
-            matchesEventCondition(element, step.condition.event)) {
-            updateFunnelProgress(funnelId, index + 1, step);
+  function monitorClicks() {
+    const throttle = S.SharedUtils?.throttle || debounce;
+    clickHandler = throttle((e) => {
+      const el = e.target;
+      funnels.forEach((state, fid) => {
+        if (!state.steps) return;
+        state.steps.forEach((step, idx) => {
+          if (step.type === 'event' && step.condition?.event && matchEvent(el, step.condition.event)) {
+            progress(fid, idx + 1, step);
           }
         });
       });
-    }, 100); // Throttle to max 10 clicks per second
-
-    doc.addEventListener('click', throttledClickHandler, { passive: true });
+    }, 100);
+    d.addEventListener('click', clickHandler, { passive: true });
   }
 
-  function monitorCustomEvents() {
-    doc.addEventListener('seentics:custom-event', (event) => {
-      const { eventName, data } = event.detail;
-      checkCustomEventForFunnels(eventName, data);
+  function monitorCustom() {
+    d.addEventListener('seentics:custom-event', (e) => {
+      const { eventName, data } = e.detail;
+      checkCustom(eventName, data);
     });
   }
 
-  function checkCustomEventForFunnels(eventName, data = {}) {
-    activeFunnels.forEach((funnelState, funnelId) => {
-      if (!funnelState.steps) return;
-
-      funnelState.steps.forEach((step, index) => {
-        if (step.type === 'custom' && step.condition?.custom === eventName) {
-          updateFunnelProgress(funnelId, index + 1, step, data);
+  function checkCustom(name, data = {}) {
+    funnels.forEach((state, fid) => {
+      if (!state.steps) return;
+      state.steps.forEach((step, idx) => {
+        if (step.type === 'custom' && step.condition?.custom === name) {
+          progress(fid, idx + 1, step, data);
         }
       });
     });
   }
 
-  function updateFunnelProgress(funnelId, stepNumber, step, additionalData = {}) {
-    const funnelState = activeFunnels.get(funnelId);
-    if (!funnelState) return;
+  function progress(fid, num, step, extra = {}) {
+    const state = funnels.get(fid);
+    if (!state) return;
 
-    // Prevent race conditions with state locking
-    if (funnelState._updating) {
-      if (DEBUG) console.log(`🔍 Seentics: Funnel ${funnelId} update in progress, skipping`);
+    if (state._updating) {
+      if (DBG) console.log(`🔍 Update in progress: ${fid}`);
       return;
     }
-    funnelState._updating = true;
+    state._updating = true;
 
     try {
-      // Enforce sequential progression: only allow next step or restart from step 1
-      const expectedNextStep = funnelState.currentStep + 1;
+      const next = state.currentStep + 1;
 
-      if (stepNumber === 1) {
-        // Allow restarting funnel from step 1
-        if (DEBUG) console.log(`🔍 Seentics: Starting/restarting funnel ${funnelId} from step 1`);
-        funnelState.currentStep = 1;
-        funnelState.completedSteps = [0]; // Step 1 completed (0-indexed)
-        funnelState.startedAt = new Date().toISOString();
-        funnelState.converted = false;
-      } else if (stepNumber === expectedNextStep) {
-        // Allow only the next sequential step
-        if (DEBUG) console.log(`🔍 Seentics: Sequential progress in funnel ${funnelId}: step ${stepNumber}`);
-        funnelState.currentStep = stepNumber;
-        funnelState.completedSteps.push(stepNumber - 1);
-
-        // Check if funnel is completed
-        if (stepNumber === funnelState.steps.length) {
-          funnelState.converted = true;
-          console.log(`🔍 Seentics: Funnel ${funnelId} completed sequentially!`);
+      if (num === 1) {
+        if (DBG) console.log(`🔍 Starting funnel ${fid}`);
+        state.currentStep = 1;
+        state.completedSteps = [0];
+        state.startedAt = new Date().toISOString();
+        state.converted = false;
+      } else if (num === next) {
+        if (DBG) console.log(`🔍 Sequential progress: ${fid}, step ${num}`);
+        state.currentStep = num;
+        state.completedSteps.push(num - 1);
+        if (num === state.steps.length) {
+          state.converted = true;
+          console.log(`🔍 Funnel ${fid} completed!`);
         }
       } else {
-        // Invalid step progression - user skipped steps or went backwards
-        if (DEBUG) console.log(`🔍 Seentics: Invalid step progression for funnel ${funnelId}: current=${funnelState.currentStep}, attempted=${stepNumber}. Ignoring.`);
+        if (DBG) console.log(`🔍 Invalid progression: ${fid}, current=${state.currentStep}, attempted=${num}`);
         return;
       }
 
-      funnelState.lastActivity = new Date();
-      activeFunnels.set(funnelId, funnelState);
-      debouncedSaveFunnelState();
-
-      // Only send API calls for actual funnel progression
-      queueFunnelEvent(funnelId, funnelState, stepNumber, additionalData);
+      state.lastActivity = new Date();
+      funnels.set(fid, state);
+      saveState();
+      queueEvent(fid, state, num, extra);
     } finally {
-      funnelState._updating = false;
+      state._updating = false;
     }
   }
 
-  function queueFunnelEvent(funnelId, funnelState, step, additionalData) {
-    const funnelEvent = createFunnelEvent(funnelId, funnelState, {
-      step_name: funnelState.steps[step - 1]?.name || `Step ${step}`,
-      step_type: funnelState.steps[step - 1]?.type || 'page',
-      ...additionalData
+  function queueEvent(fid, state, step, extra) {
+    const evt = createEvent(fid, state, {
+      step_name: state.steps[step - 1]?.name || `Step ${step}`,
+      step_type: state.steps[step - 1]?.type || 'page',
+      ...extra
     });
-
-    funnelEventQueue.push(funnelEvent);
-
-    clearTimeout(funnelEventTimer);
-    funnelEventTimer = setTimeout(sendFunnelEvents, TIME_CONSTANTS.BATCH_DELAY);
+    queue.push(evt);
+    clearTimeout(timer);
+    timer = setTimeout(sendEvents, T.BATCH_DELAY);
   }
 
-  function createFunnelEvent(funnelId, funnelState, properties) {
+  function createEvent(fid, state, props) {
     return {
-      funnel_id: funnelId,
+      funnel_id: fid,
       website_id: siteId,
-      visitor_id: visitorId,
-      session_id: sessionId,
-      current_step: funnelState.currentStep,
-      completed_steps: funnelState.completedSteps,
-      started_at: funnelState.startedAt,
-      last_activity: funnelState.lastActivity,
-      converted: funnelState.converted,
-      event_type: properties.event_type, // Extract event_type to root level for workflow tracker
-      ...properties
+      visitor_id: vid,
+      session_id: sid,
+      current_step: state.currentStep,
+      completed_steps: state.completedSteps,
+      started_at: state.startedAt,
+      last_activity: state.lastActivity,
+      converted: state.converted,
+      event_type: props.event_type,
+      ...props
     };
   }
 
-  async function sendFunnelEvents() {
-    if (!funnelsValidated || funnelEventQueue.length === 0) return;
+  async function sendEvents() {
+    if (!validated || queue.length === 0) return;
+    const events = [...queue];
+    queue = [];
 
-    const eventsToSend = [...funnelEventQueue];
-    funnelEventQueue = [];
-
-    if (DEBUG) console.log(`🔍 Seentics: Sending ${eventsToSend.length} funnel events to API`);
+    if (DBG) console.log(`🔍 Sending ${events.length} events`);
 
     try {
-      const sendEvent = async (event) => {
-        if (DEBUG) console.log('🔍 Seentics: Sending funnel event:', event);
-
+      const send = async (evt) => {
+        if (DBG) console.log('🔍 Sending:', evt);
         if (navigator.sendBeacon) {
-          const blob = new Blob([JSON.stringify(event)], { type: 'application/json' });
-          if (!navigator.sendBeacon(FUNNEL_API_ENDPOINT, blob)) {
-            console.warn('🔍 Seentics: Failed to send via sendBeacon');
-          }
+          const blob = new Blob([JSON.stringify(evt)], { type: 'application/json' });
+          if (!navigator.sendBeacon(API, blob)) console.warn('🔍 sendBeacon failed');
         } else {
-          await fetch(FUNNEL_API_ENDPOINT, {
+          await fetch(API, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(event),
-            credentials: 'omit', // Explicitly omit credentials for public tracking
+            body: JSON.stringify(evt),
+            credentials: 'omit',
             keepalive: true
           });
         }
-
-        // Emit for workflow tracker
         try {
-          doc.dispatchEvent(new CustomEvent('seentics:funnel-event', { detail: event }));
-        } catch (error) {
-          console.warn('🔍 Seentics: Failed to emit funnel event:', error);
+          d.dispatchEvent(new CustomEvent('seentics:funnel-event', { detail: evt }));
+        } catch (e) {
+          console.warn('🔍 Emit failed:', e);
         }
       };
 
-      await Promise.all(eventsToSend.map(sendEvent));
-      if (DEBUG) console.log('🔍 Seentics: Successfully sent all funnel events');
-    } catch (error) {
-      console.error('🔍 Seentics: Error sending funnel events:', error);
-      funnelEventQueue.unshift(...eventsToSend);
+      await Promise.all(events.map(send));
+      if (DBG) console.log('🔍 Events sent');
+    } catch (e) {
+      console.error('🔍 Send error:', e);
+      queue.unshift(...events);
     }
   }
 
-  function saveFunnelState() {
-    try {
-      const funnelStates = Array.from(activeFunnels.values());
-      const storage = SHARED.SharedUtils?.safeLocalStorage || {
-        set: (k, v) => { try { localStorage.setItem(k, v); return true; } catch { return false; } }
-      };
-      storage.set(`${FUNNEL_STATE_KEY}_${siteId}`, JSON.stringify(funnelStates));
-    } catch (error) {
-      console.warn('🔍 Seentics: Error saving funnel state:', error);
-    }
-  }
-
-  // Public API functions
-  function trackFunnelStep(funnelId, stepNumber, stepData = {}) {
-    if (!trackFunnels || !siteId) return;
-
-    const funnelState = activeFunnels.get(funnelId);
-    if (!funnelState) {
-      console.warn(`🔍 Seentics: Funnel ${funnelId} not found`);
+  // Public API
+  function trackStep(fid, num, data = {}) {
+    if (!trackEnabled || !siteId) return;
+    const state = funnels.get(fid);
+    if (!state) {
+      console.warn(`🔍 Funnel ${fid} not found`);
       return;
     }
-
-    if (funnelState.steps?.[stepNumber - 1]) {
-      updateFunnelProgress(funnelId, stepNumber, funnelState.steps[stepNumber - 1], stepData);
-    }
+    if (state.steps?.[num - 1]) progress(fid, num, state.steps[num - 1], data);
   }
 
-  function trackFunnelConversion(funnelId, conversionValue = 0, additionalData = {}) {
-    if (!trackFunnels || !siteId) return;
-
-    const funnelState = activeFunnels.get(funnelId);
-    if (!funnelState) {
-      console.warn(`🔍 Seentics: Funnel ${funnelId} not found`);
+  function trackConversion(fid, val = 0, extra = {}) {
+    if (!trackEnabled || !siteId) return;
+    const state = funnels.get(fid);
+    if (!state) {
+      console.warn(`🔍 Funnel ${fid} not found`);
       return;
     }
+    state.converted = true;
+    state.lastActivity = new Date();
+    funnels.set(fid, state);
+    saveState();
 
-    funnelState.converted = true;
-    funnelState.lastActivity = new Date();
-    activeFunnels.set(funnelId, funnelState);
-    saveFunnelState();
-
-    const conversionEvent = createFunnelEvent(funnelId, funnelState, {
-      step_name: funnelState.steps[funnelState.currentStep - 1]?.name || `Step ${funnelState.currentStep}`,
-      step_type: funnelState.steps[funnelState.currentStep - 1]?.type || 'page',
-      conversion_value: conversionValue,
+    const evt = createEvent(fid, state, {
+      step_name: state.steps[state.currentStep - 1]?.name || `Step ${state.currentStep}`,
+      step_type: state.steps[state.currentStep - 1]?.type || 'page',
+      conversion_value: val,
       event_type: "conversion",
-      ...additionalData
+      ...extra
     });
-
-    funnelEventQueue.push(conversionEvent);
-    sendFunnelEvents();
+    queue.push(evt);
+    sendEvents();
   }
 
-  // --- Helper Functions ---
-
-  function matchesPageCondition(currentPath, stepPath) {
-    if (currentPath === stepPath) return true;
-
-    if (stepPath.includes('*')) {
-      const regex = new RegExp(stepPath.replace(/\*/g, '.*'));
-      return regex.test(currentPath);
+  // Helpers
+  function matchPage(path, pattern) {
+    if (path === pattern) return true;
+    if (pattern.includes('*')) {
+      const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+      return regex.test(path);
     }
-
-    if (stepPath.endsWith('*')) {
-      return currentPath.startsWith(stepPath.slice(0, -1));
-    }
-
+    if (pattern.endsWith('*')) return path.startsWith(pattern.slice(0, -1));
     return false;
   }
 
-  function matchesEventCondition(element, selector) {
+  function matchEvent(el, sel) {
     try {
-      return !!(element.matches?.(selector) || element.closest?.(selector));
+      return !!(el.matches?.(sel) || el.closest?.(sel));
     } catch {
       return false;
     }
   }
 
-  // --- Event Listeners ---
-
-  function onRouteChange() {
-    const newUrl = window.location.pathname;
-    if (newUrl === currentUrl) return;
-
-    if (DEBUG) console.log(`🔍 Seentics: Route change detected: ${currentUrl} -> ${newUrl}`);
-    currentUrl = newUrl;
-
-    // Only monitor page changes if we have active funnels
-    if (activeFunnels.size === 0) {
-      if (DEBUG) console.log('🔍 Seentics: No active funnels, skipping page monitoring');
+  // Route change
+  function onRoute() {
+    const newUrl = location.pathname;
+    if (newUrl === url) return;
+    if (DBG) console.log(`🔍 Route: ${url} -> ${newUrl}`);
+    url = newUrl;
+    if (funnels.size === 0) {
+      if (DBG) console.log('🔍 No funnels, skip');
       return;
     }
-
-    // Give React time to render the new page
     setTimeout(() => {
-      if (DEBUG) console.log('🔍 Seentics: Triggering page monitoring after route change');
-      monitorPageChanges();
+      if (DBG) console.log('🔍 Checking after route');
+      checkPage();
     }, 200);
   }
 
-  // SPA navigation detection
-  const originalPushState = history.pushState;
-  const originalReplaceState = history.replaceState;
+  // SPA navigation
+  const origPush = history.pushState;
+  const origReplace = history.replaceState;
+  history.pushState = function (...a) { origPush.apply(history, a); onRoute(); };
+  history.replaceState = function (...a) { origReplace.apply(history, a); onRoute(); };
+  window.addEventListener('popstate', onRoute);
+  window.addEventListener('beforeunload', () => { if (queue.length > 0) sendEvents(); });
 
-  history.pushState = function (...args) {
-    originalPushState.apply(history, args);
-    onRouteChange();
-  };
-
-  history.replaceState = function (...args) {
-    originalReplaceState.apply(history, args);
-    onRouteChange();
-  };
-
-  window.addEventListener('popstate', onRouteChange);
-  window.addEventListener('beforeunload', () => {
-    if (funnelEventQueue.length > 0) {
-      sendFunnelEvents();
-    }
-  });
-
-  // --- Initialization ---
-  function init() {
+  // Init
+  function start() {
     if (!siteId) {
-      console.warn('🔍 Seentics: siteId not provided');
+      console.warn('🔍 No siteId');
       return;
     }
 
-    if (DEBUG) console.log('🔍 Seentics: Initializing funnel tracker for site:', siteId);
-    if (DEBUG) console.log('🔍 Seentics: Current URL:', currentUrl);
-    if (DEBUG) console.log('🔍 Seentics: API Host:', apiHost);
+    if (DBG) console.log('🔍 Init:', siteId);
+    if (DBG) console.log('🔍 URL:', url);
+    if (DBG) console.log('🔍 API:', apiHost);
 
-    initFunnelTracking();
+    init();
 
-    // Public API
     window.seentics = window.seentics || {};
     window.seentics.funnelTracker = {
-      trackFunnelStep,
-      trackFunnelConversion,
-      getFunnelState: (funnelId) => activeFunnels.get(funnelId),
-      getActiveFunnels: () => Array.from(activeFunnels.keys()),
-      monitorPageChanges,
-      triggerFunnelEvent: (funnelId, eventType, stepIndex = 0, additionalData = {}) => {
-        const funnelEvent = {
-          funnel_id: funnelId,
-          current_step: stepIndex,
-          completed_steps: [stepIndex],
+      trackFunnelStep: trackStep,
+      trackFunnelConversion: trackConversion,
+      getFunnelState: (fid) => funnels.get(fid),
+      getActiveFunnels: () => Array.from(funnels.keys()),
+      monitorPageChanges: checkPage,
+      triggerFunnelEvent: (fid, type, idx = 0, extra = {}) => {
+        const evt = {
+          funnel_id: fid,
+          current_step: idx,
+          completed_steps: [idx],
           started_at: new Date().toISOString(),
           last_activity: new Date().toISOString(),
-          converted: eventType === 'conversion',
-          properties: {
-            event_type: eventType,
-            ...additionalData
-          }
+          converted: type === 'conversion',
+          properties: { event_type: type, ...extra }
         };
-
-        console.log('🎯 Manually triggering funnel event:', funnelEvent);
-        doc.dispatchEvent(new CustomEvent('seentics:funnel-event', { detail: funnelEvent }));
-        return funnelEvent;
-      }
-    };
-
-    // Cleanup function to prevent memory leaks
-    window.seentics.funnelTracker.cleanup = () => {
-      // Clear timers
-      if (funnelEventTimer) {
-        clearTimeout(funnelEventTimer);
-        funnelEventTimer = null;
-      }
-
-      // Clear throttled handlers
-      if (throttledClickHandler && throttledClickHandler.cancel) {
-        throttledClickHandler.cancel();
-      }
-      throttledClickHandler = null;
-
-      // Send any remaining events
-      if (funnelEventQueue.length > 0) {
-        sendFunnelEvents();
-      }
-
-      // Clear state
-      activeFunnels.clear();
-      funnelEventQueue = [];
-
-      // Remove event listeners
-      window.removeEventListener('popstate', onRouteChange);
-      window.removeEventListener('beforeunload', () => {
-        if (funnelEventQueue.length > 0) {
-          sendFunnelEvents();
-        }
-      });
-
-      // Restore original history methods
-      if (originalPushState) {
-        history.pushState = originalPushState;
-      }
-      if (originalReplaceState) {
-        history.replaceState = originalReplaceState;
+        console.log('🎯 Manual trigger:', evt);
+        d.dispatchEvent(new CustomEvent('seentics:funnel-event', { detail: evt }));
+        return evt;
+      },
+      cleanup: () => {
+        if (timer) { clearTimeout(timer); timer = null; }
+        if (clickHandler?.cancel) clickHandler.cancel();
+        clickHandler = null;
+        if (queue.length > 0) sendEvents();
+        funnels.clear();
+        queue = [];
+        window.removeEventListener('popstate', onRoute);
+        if (origPush) history.pushState = origPush;
+        if (origReplace) history.replaceState = origReplace;
       }
     };
   }
 
-  // Initialize when DOM is ready
-  if (doc.readyState === 'loading') {
-    doc.addEventListener('DOMContentLoaded', init);
+  if (d.readyState === 'loading') {
+    d.addEventListener('DOMContentLoaded', start);
   } else {
-    init();
+    start();
   }
 
-  // Cleanup on page unload
   window.addEventListener('beforeunload', () => {
-    if (window.seentics?.funnelTracker?.cleanup) {
-      window.seentics.funnelTracker.cleanup();
-    }
+    if (window.seentics?.funnelTracker?.cleanup) window.seentics.funnelTracker.cleanup();
   });
+
 })(document);

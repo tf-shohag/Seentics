@@ -52,6 +52,15 @@ func main() {
 		logger.Fatal().Err(err).Msg("Failed to run database migrations")
 	}
 
+	// Auto-create partitions (6 months back, 12 months forward)
+	logger.Info().Msg("Setting up automatic partitions...")
+	if err := database.SetupMonthlyPartitions(context.Background(), db); err != nil {
+		logger.Error().Err(err).Msg("Failed to setup automatic partitions")
+		// Don't fail startup, but log the error
+	} else {
+		logger.Info().Msg("Automatic partitions setup completed")
+	}
+
 	// Initialize Redis client
 	redisURL := getEnvOrDefault("REDIS_URL", "redis://:seentics_redis_pass@redis:6379")
 	opt, err := redis.ParseURL(redisURL)
@@ -76,7 +85,7 @@ func main() {
 	privacyRepo := privacy.NewPrivacyRepository(db)
 
 	// Initialize services
-	eventService := services.NewEventService(eventRepo, logger)
+	eventService := services.NewEventService(eventRepo, db, logger)
 	funnelService := services.NewFunnelService(funnelRepo, logger, redisClient)
 	analyticsService := services.NewAnalyticsService(analyticsRepo, logger)
 	privacyService := services.NewPrivacyService(privacyRepo, logger)

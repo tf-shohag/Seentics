@@ -87,6 +87,7 @@ func (h *FunnelHandler) GetActiveFunnels(c *gin.Context) {
 		return
 	}
 
+
 	funnels, err := h.service.GetFunnels(c.Request.Context(), websiteID)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("Failed to get active funnels")
@@ -94,9 +95,17 @@ func (h *FunnelHandler) GetActiveFunnels(c *gin.Context) {
 		return
 	}
 
+	h.logger.Info().Int("total_funnels", len(funnels)).Msg("Retrieved funnels from database")
+
 	// Filter only active funnels and remove sensitive data
 	var activeFunnels []models.Funnel
 	for _, funnel := range funnels {
+		h.logger.Info().
+			Str("funnel_id", funnel.ID.String()).
+			Str("funnel_name", funnel.Name).
+			Bool("is_active", funnel.IsActive).
+			Msg("Processing funnel")
+
 		if funnel.IsActive {
 			// Create a public version without sensitive fields
 			publicFunnel := models.Funnel{
@@ -114,6 +123,7 @@ func (h *FunnelHandler) GetActiveFunnels(c *gin.Context) {
 		}
 	}
 
+	h.logger.Info().Int("active_funnels", len(activeFunnels)).Msg("Returning active funnels to tracker")
 	c.JSON(http.StatusOK, activeFunnels)
 }
 

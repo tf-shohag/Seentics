@@ -284,7 +284,7 @@ export function WorkflowsTable({ siteId }: WorkflowsTableProps) {
                         aria-label="Activate workflow"
                       />
                     </TableCell>
-                    <TableCell className="font-medium">{(workflow.analytics?.totalTriggers || workflow.totalTriggers || 0).toLocaleString()}</TableCell>
+                    <TableCell className="font-medium">{(workflow.analytics?.totalTriggers || 0).toLocaleString()}</TableCell>
                     <TableCell className="font-medium">{workflow.completionRate || '0%'}</TableCell>
                     <TableCell>
                       <AlertDialog>
