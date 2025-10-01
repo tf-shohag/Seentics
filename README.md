@@ -135,7 +135,7 @@ Seentics follows a **microservices architecture** with clear separation of conce
 
 ### **1. Clone the Repository**
 ```bash
-git clone https://github.com/seentics/seentics.git
+git clone https://github.com/skshohagmiah/Seentics
 cd seentics
 ```
 
