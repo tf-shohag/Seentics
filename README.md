@@ -107,6 +107,14 @@ Seentics follows a **microservices architecture** with clear separation of conce
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+<div align="center">
+
+### 📊 **System Architecture Diagram**
+
+<img src="./docs/simplified_architecture_diagram.svg" alt="Seentics System Architecture" width="100%" style="max-width: 1000px;">
+
+</div>
+
 ### **Service Breakdown**
 
 | Service | Technology | Port | Purpose |
